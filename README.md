@@ -1,4 +1,13 @@
-# 🪰 Zipp
+# Zipp
+
+```
+    \    /\    /
+     \  /  \  /
+     (●      ●)
+      \______/
+        ||||
+       /||||\
+```
 
 Simple backup manager with scheduling and snapshots. Add your backup jobs, set an interval, forget about it.
 
@@ -20,11 +29,14 @@ zipp list         list all jobs
 
 Jobs and config are stored in `~/.zipp/config.json`.
 
+## Features
+
+- **Snapshot backups** — each run creates a timestamped copy via rsync
+- **Auto-pruning** — keeps only N most recent snapshots per job
+- **Scheduler** — sets up systemd timer (Linux) or launchd (macOS) automatically
+- **Update check** — notifies you when a new version is available
+- **Nice TUI** — animated fly, purple/blue theme
+
 ## Scheduling
 
-On Linux, set up a systemd timer or cron job to run `zipp run` periodically:
-
-```bash
-# cron — check every hour
-echo "0 * * * * /usr/local/bin/zipp run" | crontab -
-```
+Open `zipp` and select **Setup** — it detects your OS and installs the right scheduler automatically.

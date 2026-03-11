@@ -1,18 +1,22 @@
 package main
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
-	colorPurple  = lipgloss.Color("#451ce8")
-	colorViolet  = lipgloss.Color("#7b5ef8")
+	colorPurple   = lipgloss.Color("#451ce8")
+	colorViolet   = lipgloss.Color("#7b5ef8")
 	colorLavender = lipgloss.Color("#a78bfa")
-	colorFuchsia = lipgloss.Color("#c084fc")
-	colorGray    = lipgloss.Color("#4b5563")
-	colorMuted   = lipgloss.Color("#6b7280")
-	colorWhite   = lipgloss.Color("#e2e8f0")
-	colorGreen   = lipgloss.Color("#86efac")
-	colorRed     = lipgloss.Color("#f87171")
-	colorYellow  = lipgloss.Color("#fbbf24")
+	colorFuchsia  = lipgloss.Color("#c084fc")
+	colorGray     = lipgloss.Color("#4b5563")
+	colorMuted    = lipgloss.Color("#6b7280")
+	colorWhite    = lipgloss.Color("#e2e8f0")
+	colorGreen    = lipgloss.Color("#86efac")
+	colorRed      = lipgloss.Color("#f87171")
+	colorYellow   = lipgloss.Color("#fbbf24")
 
 	styleSelected = lipgloss.NewStyle().
 			Foreground(colorLavender).
@@ -56,16 +60,32 @@ var (
 			Foreground(colorGray)
 )
 
-const asciiLogo = `  )()(
- ( ●● )
-  \──/
-  /||\`
+// flyWingFrames are the top wing-line variants for the animated header.
+// Each frame only changes the wing shape; the rest of the fly stays the same.
+var flyWingFrames = []string{
+	` \  /\  /`,  // wings spread (normal)
+	`  /\/\/\ `,  // wings up
+	`  ~~~~~~ `,  // buzzing
+	` \/    \/ `, // wings down
+}
+
+func renderFlyLines(wingLine string) string {
+	return styleLogo.Render(wingLine) + "\n" +
+		styleLogo.Render(` (`) + styleLogoAccent.Render(`●`) + styleLogo.Render(`  `) + styleLogoAccent.Render(`●`) + styleLogo.Render(`) `) + "\n" +
+		styleLogo.Render(` \______/ `) + "\n" +
+		styleLogo.Render(`   /||\   `)
+}
 
 func renderHeader(subtitle string) string {
-	logo := styleLogo.Render("  )()(") + "\n" +
-		styleLogo.Render(" ( ") + styleLogoAccent.Render("●●") + styleLogo.Render(" )") + "\n" +
-		styleLogo.Render(`  \──/`) + "\n" +
-		styleLogo.Render(`  /||\`)
+	return buildHeader(subtitle, flyWingFrames[0])
+}
+
+func renderAnimatedHeader(subtitle string, frame int) string {
+	return buildHeader(subtitle, flyWingFrames[frame%len(flyWingFrames)])
+}
+
+func buildHeader(subtitle, wingLine string) string {
+	logo := renderFlyLines(wingLine)
 
 	name := lipgloss.NewStyle().
 		Foreground(colorLavender).
@@ -87,4 +107,25 @@ func renderHeader(subtitle string) string {
 		logo+"  ",
 		"\n\n"+right,
 	) + "\n"
+}
+
+// FlyArt is the detailed fly ASCII art used in the README / help text.
+const FlyArt = `
+    \    /\    /
+     \  /  \  /
+     (●      ●)
+      \______/
+        ||||
+       /||||\
+`
+
+// FlyArtLines returns FlyArt as trimmed non-empty lines.
+func FlyArtLines() []string {
+	var out []string
+	for _, l := range strings.Split(FlyArt, "\n") {
+		if strings.TrimSpace(l) != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }

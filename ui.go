@@ -21,18 +21,34 @@ const (
 	pageConfirmDelete
 )
 
+// runResultMsg is used by setup/update cmds (non-streaming).
 type runResultMsg struct {
 	lines []string
 	err   error
 }
 
+// runStartedMsg signals that a streaming job has started.
+type runStartedMsg struct {
+	ch    <-chan string
+	errCh <-chan error
+}
+
+// jobLineMsg is one line of streamed output.
+type jobLineMsg string
+
+// jobDoneMsg signals the streaming job finished.
+type jobDoneMsg struct{ err error }
+
+// tickMsg drives the fly animation.
+type tickMsg struct{}
+
 type updateCheckMsg updateResult
 
 type model struct {
-	page      page
-	cursor    int
-	config    *Config
-	err       error
+	page   page
+	cursor int
+	config *Config
+	err    error
 
 	updateInfo    updateResult
 	schedulerInfo schedulerStatus
@@ -44,6 +60,11 @@ type model struct {
 	// run view
 	runOutput []string
 	runDone   bool
+
+	// streaming state
+	runCh    <-chan string
+	runErrCh <-chan error
+	animFrame int
 
 	// delete confirm
 	deleteTarget *Job
@@ -129,6 +150,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.schedulerInfo = schedulerStatus(msg)
 		return m, nil
 
+	// Streaming job started — kick off ticker + first line read.
+	case runStartedMsg:
+		m.runCh = msg.ch
+		m.runErrCh = msg.errCh
+		return m, tea.Batch(nextLineCmd(msg.ch, msg.errCh), tickCmd())
+
+	// One line arrived from the job.
+	case jobLineMsg:
+		m.runOutput = append(m.runOutput, string(msg))
+		return m, nextLineCmd(m.runCh, m.runErrCh)
+
+	// Streaming job finished.
+	case jobDoneMsg:
+		m.runDone = true
+		m.runCh = nil
+		m.runErrCh = nil
+		if msg.err != nil {
+			m.runOutput = append(m.runOutput, styleError.Render("error: "+msg.err.Error()))
+		} else {
+			m.runOutput = append(m.runOutput, styleSuccess.Render("\n✓ all done"))
+		}
+		m.config.save()
+		return m, nil
+
+	// Animation tick.
+	case tickMsg:
+		m.animFrame++
+		if !m.runDone {
+			return m, tickCmd()
+		}
+		return m, nil
+
+	// Non-streaming result (setup, update cmds).
 	case runResultMsg:
 		m.runDone = true
 		m.runOutput = msg.lines
@@ -142,6 +196,68 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// — Cmds —
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
+func nextLineCmd(ch <-chan string, errCh <-chan error) tea.Cmd {
+	return func() tea.Msg {
+		line, ok := <-ch
+		if !ok {
+			return jobDoneMsg{err: <-errCh}
+		}
+		return jobLineMsg(line)
+	}
+}
+
+func runAllCmd(cfg *Config) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 256)
+		errCh := make(chan error, 1)
+		go func() {
+			defer close(ch)
+			var runErr error
+			ran := 0
+			for _, job := range cfg.Jobs {
+				if !job.Enabled {
+					continue
+				}
+				if err := runJob(job, ch); err != nil {
+					ch <- styleError.Render("✗ " + err.Error())
+					runErr = err
+				}
+				ran++
+			}
+			if ran == 0 {
+				ch <- styleDim.Render("no enabled jobs to run")
+			}
+			errCh <- runErr
+		}()
+		return runStartedMsg{ch: ch, errCh: errCh}
+	}
+}
+
+func runJobCmd(cfg *Config, job *Job) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 256)
+		errCh := make(chan error, 1)
+		go func() {
+			defer close(ch)
+			var runErr error
+			if err := runJob(job, ch); err != nil {
+				ch <- styleError.Render("✗ " + err.Error())
+				runErr = err
+			}
+			errCh <- runErr
+		}()
+		return runStartedMsg{ch: ch, errCh: errCh}
+	}
 }
 
 // — Menu —
@@ -532,17 +648,29 @@ func (m model) viewAdd() string {
 	return b.String()
 }
 
+var buzzFrames = []string{"bzz", "bzz ·", "bzz ··", "bzz ···"}
+
 func (m model) viewRun() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Running"))
+
+	if !m.runDone {
+		b.WriteString(renderAnimatedHeader("Running", m.animFrame))
+	} else {
+		b.WriteString(renderHeader("Done"))
+	}
 	b.WriteString("\n")
 
-	for _, line := range m.runOutput {
+	// Show at most last 15 lines so it doesn't overflow
+	lines := m.runOutput
+	if len(lines) > 15 {
+		lines = lines[len(lines)-15:]
+	}
+	for _, line := range lines {
 		b.WriteString("  " + line + "\n")
 	}
 
 	if !m.runDone {
-		b.WriteString("\n  " + styleDim.Render("running..."))
+		b.WriteString("\n  " + styleDim.Render(buzzFrames[m.animFrame%len(buzzFrames)]))
 	} else {
 		b.WriteString(styleHint.Render("\n  enter to go back"))
 	}
@@ -583,58 +711,4 @@ func (m model) viewConfirmDelete() string {
 		b.WriteString("  " + styleError.Render("[y]") + styleDim.Render(" yes    ") + styleDim.Render("[n / esc]") + styleDim.Render(" no") + "\n")
 	}
 	return b.String()
-}
-
-// — Cmds —
-
-func runAllCmd(cfg *Config) tea.Cmd {
-	return func() tea.Msg {
-		out := make(chan string, 128)
-		var runErr error
-		var lines []string
-
-		go func() {
-			defer close(out)
-			ran := 0
-			for _, job := range cfg.Jobs {
-				if !job.Enabled {
-					continue
-				}
-				if err := runJob(job, out); err != nil {
-					out <- styleError.Render("✗ " + err.Error())
-					runErr = err
-				}
-				ran++
-			}
-			if ran == 0 {
-				out <- styleDim.Render("no enabled jobs to run")
-			}
-		}()
-
-		for line := range out {
-			lines = append(lines, line)
-		}
-		return runResultMsg{lines: lines, err: runErr}
-	}
-}
-
-func runJobCmd(cfg *Config, job *Job) tea.Cmd {
-	return func() tea.Msg {
-		out := make(chan string, 128)
-		var runErr error
-		var lines []string
-
-		go func() {
-			defer close(out)
-			if err := runJob(job, out); err != nil {
-				out <- styleError.Render("✗ " + err.Error())
-				runErr = err
-			}
-		}()
-
-		for line := range out {
-			lines = append(lines, line)
-		}
-		return runResultMsg{lines: lines, err: runErr}
-	}
 }

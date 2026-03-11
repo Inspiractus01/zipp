@@ -51,21 +51,24 @@ func runJob(job *Job, output chan<- string) error {
 
 	job.LastRun = time.Now()
 
-	if err := pruneSnapshots(baseDir, job.MaxSnapshots); err != nil {
+	deleted, err := pruneSnapshots(baseDir, job.MaxSnapshots)
+	if err != nil {
 		output <- fmt.Sprintf("  warning: pruning snapshots failed: %v", err)
+	} else if deleted > 0 {
+		output <- fmt.Sprintf("  ✓ pruned %d old snapshot(s)", deleted)
 	}
 
 	output <- "  ✓ done"
 	return nil
 }
 
-func pruneSnapshots(dest string, max int) error {
+func pruneSnapshots(dest string, max int) (int, error) {
 	if max <= 0 {
-		return nil
+		return 0, nil
 	}
 	entries, err := os.ReadDir(dest)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var snapshots []string
 	for _, e := range entries {
@@ -74,14 +77,16 @@ func pruneSnapshots(dest string, max int) error {
 		}
 	}
 	sort.Strings(snapshots)
+	deleted := 0
 	for len(snapshots) > max {
 		target := filepath.Join(dest, snapshots[0])
 		if err := os.RemoveAll(target); err != nil {
-			return err
+			return deleted, err
 		}
 		snapshots = snapshots[1:]
+		deleted++
 	}
-	return nil
+	return deleted, nil
 }
 
 func expandPath(p string) string {
