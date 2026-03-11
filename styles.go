@@ -61,23 +61,28 @@ var (
 )
 
 var flyWingFrames = []string{
-	`      ____`, // wings flat
-	`    //  \\`, // wings up
-	`      ~~~~`, // buzzing
-	`    \\  //`, // wings down
+	`  __   __`, // wings flat
+	`  /\   /\`, // wings up
+	`  ~~   ~~`, // buzzing
+	`  \/   \/`, // wings down
 }
 
-var flySosakChars = []string{";", " ", ";", " "}
+var flySosakFrames = []string{
+	`   ~^~ `, // extended
+	`    ^  `, // retracted
+	`   ~^~ `, // extended
+	`    ^  `, // retracted
+}
 
 var styleSosak = lipgloss.NewStyle().Foreground(colorRed)
 
 func renderFlyLines(frame int) string {
 	idx := frame % 4
-	line1 := styleLogo.Render(flyWingFrames[idx])
-	line2 := styleLogo.Render("     ") + styleSosak.Render(flySosakChars[idx]) + styleLogo.Render(`----""`) + styleLogoAccent.Render(`(#)`)
-	line3 := styleLogo.Render(`      '--|-|'|'`)
-	line4 := styleLogo.Render(`        /  |  \`)
-	return line1 + "\n" + line2 + "\n" + line3 + "\n" + line4
+	return styleLogo.Render(flyWingFrames[idx]) + "\n" +
+		styleLogo.Render(` /  \-/  \`) + "\n" +
+		styleLogo.Render(`' (`) + styleLogoAccent.Render(`@I@`) + styleLogo.Render(`) '`) + "\n" +
+		styleLogo.Render(`\___Y___/`) + "\n" +
+		styleSosak.Render(flySosakFrames[idx])
 }
 
 // renderFlyOnly returns just the fly with no name/version beside it.
@@ -114,7 +119,7 @@ func buildHeader(subtitle string, frame int) string {
 
 	return lipgloss.JoinHorizontal(lipgloss.Center,
 		logo+"  ",
-		"\n\n"+right,
+		"\n\n\n"+right,
 	) + "\n"
 }
 
