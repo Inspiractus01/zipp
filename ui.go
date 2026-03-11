@@ -964,8 +964,11 @@ func (m model) nestMenuItems() []string {
 	var items []string
 	if !m.nestTSStatus.installed {
 		items = append(items, "Setup Tailscale")
+	} else if !m.nestTSStatus.loggedIn {
+		items = append(items, "Login to Tailscale")
 	} else if !m.nestTSStatus.running {
 		items = append(items, "Connect Tailscale")
+		items = append(items, "Logout from Tailscale")
 	} else {
 		if m.config.Nest != nil {
 			items = append(items, "Change address")
@@ -973,6 +976,7 @@ func (m model) nestMenuItems() []string {
 			items = append(items, "Enter address")
 		}
 		items = append(items, "Disconnect Tailscale")
+		items = append(items, "Logout from Tailscale")
 	}
 	items = append(items, "Back")
 	return items
@@ -997,11 +1001,16 @@ func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch items[m.nestPageCursor] {
 		case "Setup Tailscale":
 			return m, installTailscaleCmd()
+		case "Login to Tailscale":
+			return m, tailscaleLoginCmd()
 		case "Connect Tailscale":
 			return m, tailscaleUpCmd()
 		case "Disconnect Tailscale":
 			m.nestConnected = false
 			return m, tailscaleDownCmd()
+		case "Logout from Tailscale":
+			m.nestConnected = false
+			return m, tailscaleLogoutCmd()
 		case "Enter address", "Change address":
 			ti := textinput.New()
 			ti.Placeholder = "short code (570-0932) or full IP:port"
@@ -1070,12 +1079,14 @@ func (m model) viewNestMenu() string {
 
 	// tailscale status
 	tsLine := "  Tailscale   "
-	if m.nestTSStatus.installed && m.nestTSStatus.running {
-		tsLine += styleSuccess.Render("● connected  ") + styleDim.Render(m.nestTSStatus.ip)
-	} else if m.nestTSStatus.installed {
-		tsLine += styleWarning.Render("○ not connected")
-	} else {
+	if !m.nestTSStatus.installed {
 		tsLine += styleError.Render("○ not installed")
+	} else if m.nestTSStatus.running {
+		tsLine += styleSuccess.Render("● connected  ") + styleDim.Render(m.nestTSStatus.ip)
+	} else if m.nestTSStatus.loggedIn {
+		tsLine += styleWarning.Render("○ logged in, not connected")
+	} else {
+		tsLine += styleWarning.Render("○ logged out")
 	}
 	b.WriteString(tsLine + "\n")
 
