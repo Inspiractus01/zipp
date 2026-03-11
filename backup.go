@@ -75,28 +75,38 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 	return nil
 }
 
-// zstdAvailable returns true if the zstd binary is on PATH.
-func zstdAvailable() bool {
-	_, err := exec.LookPath("zstd")
-	return err == nil
+// findZstd returns the full path to the zstd binary, or "" if not found.
+// Checks common locations because PATH inside a GUI app can differ from the shell.
+func findZstd() string {
+	candidates := []string{
+		"zstd",
+		"/opt/homebrew/bin/zstd",
+		"/usr/local/bin/zstd",
+		"/usr/bin/zstd",
+		"/opt/local/bin/zstd",
+	}
+	for _, c := range candidates {
+		if p, err := exec.LookPath(c); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- string) error {
 	srcDir := strings.TrimSuffix(src, "/")
 
-	// prefer zstd (faster, better ratio, opens on Windows via 7-Zip)
-	// fall back to gzip if zstd not installed
-	useZstd := zstdAvailable()
+	zstd := findZstd()
 	var archivePath string
 	var tarArgs []string
-	if useZstd {
+	if zstd != "" {
 		archivePath = filepath.Join(baseDir, snapshot+".tar.zst")
-		tarArgs = []string{"-I", "zstd", "-cf", archivePath, "-C", srcDir, "."}
-		output <- "  compressing with zstd... (fast + good ratio)"
+		tarArgs = []string{"-I", zstd, "-cf", archivePath, "-C", srcDir, "."}
+		output <- "  compressing with zstd..."
 	} else {
 		archivePath = filepath.Join(baseDir, snapshot+".tar.gz")
 		tarArgs = []string{"-czf", archivePath, "-C", srcDir, "."}
-		output <- "  compressing with gzip... (install zstd for better speed)"
+		output <- "  compressing with gzip (install zstd for better speed)..."
 	}
 
 	output <- fmt.Sprintf("→ %s", job.Name)
