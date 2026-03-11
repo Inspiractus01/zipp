@@ -16,6 +16,7 @@ const (
 	pageMenu page = iota
 	pageJobs
 	pageAdd
+	pageEdit
 	pageRun
 	pageConfirmDelete
 )
@@ -46,6 +47,9 @@ type model struct {
 
 	// delete confirm
 	deleteTarget *Job
+
+	// edit
+	editTarget *Job
 }
 
 var menuItems = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
@@ -74,7 +78,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "esc":
-			if m.page == pageAdd || m.page == pageJobs || m.page == pageRun {
+			if m.page == pageAdd || m.page == pageEdit || m.page == pageJobs || m.page == pageRun {
 				m.page = pageMenu
 				m.cursor = 0
 				m.formStep = 0
@@ -95,6 +99,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateJobs(msg)
 		case pageAdd:
 			return m.updateAdd(msg)
+		case pageEdit:
+			return m.updateEdit(msg)
 		case pageRun:
 			return m.updateRun(msg)
 		case pageConfirmDelete:
@@ -183,6 +189,13 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runDone = false
 			return m, runJobCmd(m.config, job)
 		}
+	case "e":
+		if len(m.config.Jobs) > 0 {
+			m.editTarget = m.config.Jobs[m.cursor]
+			m.formStep = 0
+			m.formInputs = newFormInputsFrom(m.editTarget)
+			m.page = pageEdit
+		}
 	case "d":
 		if len(m.config.Jobs) > 0 {
 			m.deleteTarget = m.config.Jobs[m.cursor]
@@ -222,6 +235,16 @@ func newFormInputs() []textinput.Model {
 		}
 		inputs[i] = ti
 	}
+	return inputs
+}
+
+func newFormInputsFrom(j *Job) []textinput.Model {
+	inputs := newFormInputs()
+	inputs[0].SetValue(j.Name)
+	inputs[1].SetValue(j.Source)
+	inputs[2].SetValue(j.Destination)
+	inputs[3].SetValue(fmt.Sprintf("%d", j.IntervalHours))
+	inputs[4].SetValue(fmt.Sprintf("%d", j.MaxSnapshots))
 	return inputs
 }
 
@@ -289,6 +312,46 @@ func (m model) buildJob() *Job {
 	}
 }
 
+// — Edit job —
+
+func (m model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if m.formStep < len(m.formInputs)-1 {
+			m.formInputs[m.formStep].Blur()
+			m.formStep++
+			m.formInputs[m.formStep].Focus()
+			return m, textinput.Blink
+		}
+		// save edits back to existing job
+		if m.editTarget != nil {
+			m.editTarget.Name = strings.TrimSpace(m.formInputs[0].Value())
+			m.editTarget.Source = strings.TrimSpace(m.formInputs[1].Value())
+			m.editTarget.Destination = strings.TrimSpace(m.formInputs[2].Value())
+			fmt.Sscanf(m.formInputs[3].Value(), "%d", &m.editTarget.IntervalHours)
+			fmt.Sscanf(m.formInputs[4].Value(), "%d", &m.editTarget.MaxSnapshots)
+			m.config.save()
+		}
+		m.editTarget = nil
+		m.formInputs = nil
+		m.formStep = 0
+		m.page = pageJobs
+		return m, nil
+
+	case "shift+tab":
+		if m.formStep > 0 {
+			m.formInputs[m.formStep].Blur()
+			m.formStep--
+			m.formInputs[m.formStep].Focus()
+			return m, textinput.Blink
+		}
+	}
+
+	var cmd tea.Cmd
+	m.formInputs[m.formStep], cmd = m.formInputs[m.formStep].Update(msg)
+	return m, cmd
+}
+
 // — Run view —
 
 func (m model) updateRun(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -334,6 +397,8 @@ func (m model) View() string {
 		return m.viewJobs()
 	case pageAdd:
 		return m.viewAdd()
+	case pageEdit:
+		return m.viewEdit()
 	case pageRun:
 		return m.viewRun()
 	case pageConfirmDelete:
@@ -416,7 +481,7 @@ func (m model) viewJobs() string {
 		}
 	}
 
-	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · d delete · t toggle · esc back"))
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · e edit · d delete · t toggle · esc back"))
 	return b.String()
 }
 
@@ -463,14 +528,37 @@ func (m model) viewRun() string {
 	return b.String()
 }
 
+func (m model) viewEdit() string {
+	var b strings.Builder
+	b.WriteString(renderHeader("Edit job"))
+	b.WriteString("\n")
+
+	for i, label := range formLabels {
+		lStyle := styleLabel
+		var val string
+		if i == m.formStep {
+			lStyle = lStyle.Copy().Foreground(colorLavender)
+			val = m.formInputs[i].View()
+		} else if i < m.formStep {
+			val = styleNormal.Render(m.formInputs[i].Value())
+		} else {
+			val = styleDim.Render(m.formInputs[i].Value())
+		}
+		b.WriteString("  " + lStyle.Render(label+":") + "  " + val + "\n")
+	}
+
+	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
+	return b.String()
+}
+
 func (m model) viewConfirmDelete() string {
 	var b strings.Builder
 	b.WriteString(renderHeader("Delete job"))
 	b.WriteString("\n")
 
 	if m.deleteTarget != nil {
-		b.WriteString("  " + styleNormal.Render("Delete ") + styleError.Render(m.deleteTarget.Name) + styleNormal.Render("?") + "\n\n")
-		b.WriteString("  " + styleError.Render("y") + styleDim.Render(" yes  ") + styleDim.Render("n esc") + styleDim.Render(" no") + "\n")
+		b.WriteString("  " + styleDim.Render("do you really want to delete ") + styleError.Render(m.deleteTarget.Name) + styleDim.Render("?") + "\n\n")
+		b.WriteString("  " + styleError.Render("[y]") + styleDim.Render(" yes    ") + styleDim.Render("[n / esc]") + styleDim.Render(" no") + "\n")
 	}
 	return b.String()
 }
