@@ -29,8 +29,9 @@ func runJob(job *Job, output chan<- string) error {
 	}
 
 	output <- fmt.Sprintf("→ %s", job.Name)
-	output <- fmt.Sprintf("  src:  %s", src)
-	output <- fmt.Sprintf("  dest: %s", dest)
+	output <- fmt.Sprintf("  from  %s", src)
+	output <- fmt.Sprintf("  to    %s", dest)
+	output <- "  syncing files..."
 
 	cmd := exec.Command("rsync", "-a", "--delete", "--stats", src, dest)
 
@@ -43,14 +44,16 @@ func runJob(job *Job, output chan<- string) error {
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, "Number of files:") ||
 			strings.HasPrefix(line, "Total transferred") ||
-			strings.HasPrefix(line, "Number of created") ||
-			strings.HasPrefix(line, "Number of deleted") {
+			strings.HasPrefix(line, "Number of created") {
 			output <- "  " + strings.TrimSpace(line)
 		}
 	}
 
 	job.LastRun = time.Now()
 
+	if job.MaxSnapshots > 0 {
+		output <- "  cleaning up old snapshots..."
+	}
 	deleted, err := pruneSnapshots(baseDir, job.MaxSnapshots)
 	if err != nil {
 		output <- fmt.Sprintf("  warning: pruning snapshots failed: %v", err)

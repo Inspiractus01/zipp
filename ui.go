@@ -45,10 +45,11 @@ type tickMsg struct{}
 type updateCheckMsg updateResult
 
 type model struct {
-	page   page
-	cursor int
-	config *Config
-	err    error
+	page        page
+	cursor      int
+	config      *Config
+	err         error
+	windowWidth int
 
 	updateInfo    updateResult
 	schedulerInfo schedulerStatus
@@ -105,6 +106,10 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	case tea.WindowSizeMsg:
+		m.windowWidth = msg.Width
+		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -651,30 +656,65 @@ func (m model) viewAdd() string {
 var buzzFrames = []string{"bzz", "bzz ·", "bzz ··", "bzz ···"}
 
 func (m model) viewRun() string {
+	if m.runDone {
+		return m.viewRunDone()
+	}
+
+	// — Running: centered fly + live status —
 	var b strings.Builder
 
-	if !m.runDone {
-		b.WriteString(renderAnimatedHeader("Running", m.animFrame))
-	} else {
-		b.WriteString(renderHeader("Done"))
+	// compute left pad so fly is centered (fly visual width ≈ 7 chars)
+	const flyWidth = 7
+	pad := ""
+	if m.windowWidth > flyWidth {
+		pad = strings.Repeat(" ", (m.windowWidth-flyWidth)/2)
 	}
+
+	// push fly down a bit
+	b.WriteString("\n\n\n")
+
+	// fly lines, each padded to center
+	for _, line := range strings.Split(renderFlyOnly(m.animFrame), "\n") {
+		b.WriteString(pad + line + "\n")
+	}
+
 	b.WriteString("\n")
 
-	// Show at most last 15 lines so it doesn't overflow
+	// last status line (what's happening right now)
+	status := buzzFrames[m.animFrame%len(buzzFrames)]
+	if len(m.runOutput) > 0 {
+		last := strings.TrimSpace(m.runOutput[len(m.runOutput)-1])
+		if last != "" {
+			status = last
+		}
+	}
+	statusLine := styleDim.Render(status)
+	if m.windowWidth > 0 {
+		statusLine = lipgloss.NewStyle().
+			Width(m.windowWidth).
+			Align(lipgloss.Center).
+			Foreground(colorMuted).
+			Render(status)
+	}
+	b.WriteString(statusLine + "\n")
+
+	return b.String()
+}
+
+func (m model) viewRunDone() string {
+	var b strings.Builder
+	b.WriteString(renderHeader("Done"))
+	b.WriteString("\n")
+
 	lines := m.runOutput
-	if len(lines) > 15 {
-		lines = lines[len(lines)-15:]
+	if len(lines) > 18 {
+		lines = lines[len(lines)-18:]
 	}
 	for _, line := range lines {
 		b.WriteString("  " + line + "\n")
 	}
 
-	if !m.runDone {
-		b.WriteString("\n  " + styleDim.Render(buzzFrames[m.animFrame%len(buzzFrames)]))
-	} else {
-		b.WriteString(styleHint.Render("\n  enter to go back"))
-	}
-
+	b.WriteString(styleHint.Render("\n  enter to go back"))
 	return b.String()
 }
 

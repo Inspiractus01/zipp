@@ -76,6 +76,11 @@ func renderFlyLines(wingLine string) string {
 		styleLogo.Render(`  /||\`)
 }
 
+// renderFlyOnly returns just the 4-line fly with no name/version beside it.
+func renderFlyOnly(frame int) string {
+	return renderFlyLines(flyWingFrames[frame%len(flyWingFrames)])
+}
+
 func renderHeader(subtitle string) string {
 	return buildHeader(subtitle, flyWingFrames[0])
 }
