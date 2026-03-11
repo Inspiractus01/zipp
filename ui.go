@@ -129,10 +129,14 @@ func newModel(cfg *Config) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		func() tea.Msg { return updateCheckMsg(checkForUpdate()) },
 		checkSchedulerCmd(),
-	)
+	}
+	if m.config.Nest != nil {
+		cmds = append(cmds, nestHealthCmd(m.config.Nest.Address))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -70,21 +70,13 @@ func tailscaleLogoutCmd() tea.Cmd {
 }
 
 func tailscaleUpCmd() tea.Cmd {
-	return func() tea.Msg {
-		out, err := exec.Command("tailscale", "up").CombinedOutput()
-		if err != nil {
-			return nestTSDoneMsg{err: fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)}
-		}
-		return nestTSDoneMsg{}
-	}
+	return tea.ExecProcess(exec.Command("sudo", "tailscale", "up"), func(err error) tea.Msg {
+		return nestTSDoneMsg{err: err}
+	})
 }
 
 func tailscaleDownCmd() tea.Cmd {
-	return func() tea.Msg {
-		out, err := exec.Command("tailscale", "down").CombinedOutput()
-		if err != nil {
-			return nestTSDoneMsg{err: fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)}
-		}
-		return nestTSDoneMsg{}
-	}
+	return tea.ExecProcess(exec.Command("sudo", "tailscale", "down"), func(err error) tea.Msg {
+		return nestTSDoneMsg{err: err}
+	})
 }
