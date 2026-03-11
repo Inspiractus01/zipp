@@ -60,37 +60,46 @@ var (
 			Foreground(colorGray)
 )
 
-// flyWingFrames — top wing line only, rest of fly stays the same.
-// All frames are the same width so layout doesn't shift during animation.
 var flyWingFrames = []string{
-	`  )()(`, // wings spread (normal)
-	`  /\/\`, // wings up
-	`  ~~~~`, // buzzing
-	`  \/\/`, // wings down
+	`._q0p_.`, // wings normal
+	`._/0\_.`, // wings up
+	`.~~0~~.`, // buzzing
+	`._\0/_.`, // wings down
 }
 
-func renderFlyLines(wingLine string) string {
-	return styleLogo.Render(wingLine) + "\n" +
-		styleLogo.Render(" ( ") + styleLogoAccent.Render("●●") + styleLogo.Render(" )") + "\n" +
-		styleLogo.Render(`  \──/`) + "\n" +
-		styleLogo.Render(`  /||\`)
+var flySosakFrames = []string{
+	"  `·´", // extended  — · aligned with head center
+	"   · ", // retracted — · aligned with head center
+	"  `·´", // extended
+	"   · ", // retracted
 }
 
-// renderFlyOnly returns just the 4-line fly with no name/version beside it.
+var styleSosak = lipgloss.NewStyle().Foreground(colorRed)
+
+func renderFlyLines(frame int) string {
+	idx := frame % len(flyWingFrames)
+	return styleSosak.Render(flySosakFrames[idx]) + "\n" +
+		styleLogo.Render(flyWingFrames[idx]) + "\n" +
+		styleLogo.Render(`'=(`) + styleLogoAccent.Render(`_`) + styleLogo.Render(`)='`) + "\n" +
+		styleLogo.Render(` / `) + styleLogoAccent.Render(`V`) + styleLogo.Render(` \`) + "\n" +
+		styleLogo.Render(`(_/`) + styleLogoAccent.Render(`^`) + styleLogo.Render(`\_)`)
+}
+
+// renderFlyOnly returns just the fly with no name/version beside it.
 func renderFlyOnly(frame int) string {
-	return renderFlyLines(flyWingFrames[frame%len(flyWingFrames)])
+	return renderFlyLines(frame)
 }
 
 func renderHeader(subtitle string) string {
-	return buildHeader(subtitle, flyWingFrames[0])
+	return buildHeader(subtitle, 0)
 }
 
 func renderAnimatedHeader(subtitle string, frame int) string {
-	return buildHeader(subtitle, flyWingFrames[frame%len(flyWingFrames)])
+	return buildHeader(subtitle, frame)
 }
 
-func buildHeader(subtitle, wingLine string) string {
-	logo := renderFlyLines(wingLine)
+func buildHeader(subtitle string, frame int) string {
+	logo := renderFlyLines(frame)
 
 	name := lipgloss.NewStyle().
 		Foreground(colorLavender).
@@ -110,7 +119,7 @@ func buildHeader(subtitle, wingLine string) string {
 
 	return lipgloss.JoinHorizontal(lipgloss.Center,
 		logo+"  ",
-		"\n\n"+right,
+		"\n\n\n"+right,
 	) + "\n"
 }
 
