@@ -1,10 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -20,9 +22,15 @@ type Job struct {
 	Compress      bool      `json:"compress"`
 }
 
+type NestConfig struct {
+	Address string `json:"address"` // host:port
+	Token   string `json:"token"`
+}
+
 type Config struct {
-	Version string `json:"version"`
-	Jobs    []*Job `json:"jobs"`
+	Version string      `json:"version"`
+	Jobs    []*Job      `json:"jobs"`
+	Nest    *NestConfig `json:"nest,omitempty"`
 }
 
 func configPath() string {
@@ -104,6 +112,22 @@ func (j *Job) nextRun() string {
 		return "in " + roundMins(until)
 	}
 	return "in " + roundHours(until)
+}
+
+func decodeConnCode(code string) (address, token string, err error) {
+	b, err := base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(code)
+	if err != nil {
+		err = fmt.Errorf("invalid code")
+		return
+	}
+	parts := strings.SplitN(string(b), ":", 3)
+	if len(parts) != 3 {
+		err = fmt.Errorf("invalid code")
+		return
+	}
+	address = parts[0] + ":" + parts[1]
+	token = parts[2]
+	return
 }
 
 func roundMins(d time.Duration) string {

@@ -21,6 +21,7 @@ const (
 	pageConfirmDelete
 	pageRestore
 	pageConfirmRestore
+	pageNest
 )
 
 // runResultMsg is used by setup/update cmds (non-streaming).
@@ -79,9 +80,13 @@ type model struct {
 	restoreJob    *Job
 	restoreSnaps  []string
 	restoreCursor int
+
+	// nest
+	nestInput textinput.Model
+	nestErr   string
 }
 
-var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
+var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Nest", "Quit"}
 
 func (m model) getMenuItems() []string {
 	if m.updateInfo.hasUpdate {
@@ -119,6 +124,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.page == pageNest {
+			return m.updateNest(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.page == pageMenu {
@@ -163,6 +171,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRestore(msg)
 		case pageConfirmRestore:
 			return m.updateConfirmRestore(msg)
+		case pageNest:
+			return m.updateNest(msg)
 		}
 
 	case updateCheckMsg:
@@ -321,6 +331,14 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runOutput = nil
 			m.runDone = false
 			return m, runUpdateCmd()
+		case "Nest":
+			ti := textinput.New()
+			ti.Placeholder = "paste connect code from zipp-nest"
+			ti.Width = 60
+			ti.Focus()
+			m.nestInput = ti
+			m.nestErr = ""
+			m.page = pageNest
 		case "Quit":
 			return m, tea.Quit
 		}
@@ -589,6 +607,8 @@ func (m model) View() string {
 		return m.viewRestore()
 	case pageConfirmRestore:
 		return m.viewConfirmRestore()
+	case pageNest:
+		return m.viewNest()
 	}
 	return ""
 }
@@ -608,6 +628,13 @@ func (m model) viewMenu() string {
 		}
 		if item == "Jobs" && len(m.config.Jobs) > 0 {
 			b.WriteString(styleDim.Render(fmt.Sprintf("   %d total", len(m.config.Jobs))))
+		}
+		if item == "Nest" {
+			if m.config.Nest != nil {
+				b.WriteString(styleSuccess.Render("   ✓ " + m.config.Nest.Address))
+			} else {
+				b.WriteString(styleDim.Render("   not connected"))
+			}
 		}
 		b.WriteString("\n")
 	}
@@ -872,6 +899,61 @@ func (m model) viewRestore() string {
 	}
 
 	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · esc back"))
+	return b.String()
+}
+
+func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.page = pageMenu
+		m.nestErr = ""
+		return m, nil
+	case "enter":
+		code := strings.TrimSpace(m.nestInput.Value())
+		if code == "" {
+			// clear nest config
+			m.config.Nest = nil
+			m.config.save()
+			m.page = pageMenu
+			return m, nil
+		}
+		addr, token, err := decodeConnCode(code)
+		if err != nil {
+			m.nestErr = "invalid code"
+			return m, nil
+		}
+		m.config.Nest = &NestConfig{Address: addr, Token: token}
+		if err := m.config.save(); err != nil {
+			m.nestErr = "could not save: " + err.Error()
+			return m, nil
+		}
+		m.page = pageMenu
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.nestInput, cmd = m.nestInput.Update(msg)
+	return m, cmd
+}
+
+func (m model) viewNest() string {
+	var b strings.Builder
+	b.WriteString(renderHeader("Nest"))
+	b.WriteString("\n")
+
+	if m.config.Nest != nil {
+		b.WriteString(styleSuccess.Render("  ✓ connected to "+m.config.Nest.Address) + "\n\n")
+		b.WriteString(styleDim.Render("  paste a new code to update, or press enter to keep current\n\n"))
+	} else {
+		b.WriteString(styleDim.Render("  paste the connect code from zipp-nest:\n\n"))
+	}
+
+	b.WriteString("  " + m.nestInput.View() + "\n")
+
+	if m.nestErr != "" {
+		b.WriteString("\n  " + styleError.Render("✗ "+m.nestErr) + "\n")
+	}
+
+	b.WriteString(styleHint.Render("\n  enter save · esc back"))
 	return b.String()
 }
 
