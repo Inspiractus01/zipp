@@ -1,0 +1,5 @@
+# Project conventions
+
+- Author: Michal Mucha <muchamichal@proton.me>
+- Do NOT add any tool attribution lines to commit messages.
+- Do NOT mention external tools in commits, PRs, or release notes.
