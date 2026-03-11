@@ -226,12 +226,62 @@ func uninstall() {
 	fmt.Println("\nzipp uninstalled. bye 🪰")
 }
 
-// tea.Cmd
+// setupSchedulerCmd exits alt-screen on Linux so sudo prompts work.
+// On macOS launchd writes to ~/Library/LaunchAgents — no sudo needed.
 func setupSchedulerCmd() tea.Cmd {
+	if runtime.GOOS == "linux" {
+		return setupSchedulerLinuxCmd()
+	}
 	return func() tea.Msg {
 		lines, err := setupScheduler()
 		return runResultMsg{lines: lines, err: err}
 	}
+}
+
+func setupSchedulerLinuxCmd() tea.Cmd {
+	self, _ := os.Executable()
+	if self == "" {
+		self = "/usr/local/bin/zipp"
+	}
+	script := fmt.Sprintf(`set -e
+echo "detected: Linux + systemd"
+sudo tee /etc/systemd/system/zipp.service > /dev/null << 'UNIT'
+[Unit]
+Description=Zipp backup runner
+
+[Service]
+Type=oneshot
+ExecStart=%s run
+UNIT
+
+sudo tee /etc/systemd/system/zipp.timer > /dev/null << 'UNIT'
+[Unit]
+Description=Zipp backup timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now zipp.timer
+echo "✓ systemd timer installed (runs every hour)"
+`, self)
+
+	cmd := exec.Command("bash", "-c", script)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		var lines []string
+		if err != nil {
+			return runResultMsg{lines: lines, err: fmt.Errorf("setup failed: %w", err)}
+		}
+		lines = append(lines, styleSuccess.Render("✓ systemd timer installed (runs every hour)"))
+		lines = append(lines, styleDim.Render("  systemctl status zipp.timer"))
+		return runResultMsg{lines: lines}
+	})
 }
 
 type schedulerCheckMsg schedulerStatus

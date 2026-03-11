@@ -12,7 +12,7 @@ import (
 )
 
 type updateResult struct {
-	latest  string
+	latest    string
 	hasUpdate bool
 }
 
@@ -47,25 +47,17 @@ func newerThan(a, b string) bool {
 	return fmt.Sprintf("%010s", a) > fmt.Sprintf("%010s", b)
 }
 
+// runUpdateCmd exits alt-screen so the install script can prompt for sudo password.
 func runUpdateCmd() tea.Cmd {
-	return func() tea.Msg {
+	cmd := exec.Command("bash", "-c",
+		"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
+	)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		var lines []string
-		lines = append(lines, "downloading latest version...")
-
-		cmd := exec.Command("bash", "-c",
-			"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
-		)
-		out, err := cmd.CombinedOutput()
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if line != "" {
-				lines = append(lines, line)
-			}
-		}
 		if err != nil {
 			return runResultMsg{lines: lines, err: fmt.Errorf("update failed: %w", err)}
 		}
-		lines = append(lines, "")
 		lines = append(lines, styleSuccess.Render("✓ updated — restart zipp to use the new version"))
 		return runResultMsg{lines: lines}
-	}
+	})
 }
