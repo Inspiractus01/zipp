@@ -202,6 +202,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateInfo = updateResult(msg)
 		return m, nil
 
+	case updateDoneMsg:
+		if msg.err != nil {
+			m.runDone = true
+			m.runOutput = append(m.runOutput, styleError.Render("update failed: "+msg.err.Error()))
+			return m, nil
+		}
+		return m, tea.Quit
+
 	case nestHealthMsg:
 		m.nestChecking = false
 		m.nestConnected = msg.ok

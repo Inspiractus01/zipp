@@ -47,17 +47,14 @@ func newerThan(a, b string) bool {
 	return fmt.Sprintf("%010s", a) > fmt.Sprintf("%010s", b)
 }
 
+type updateDoneMsg struct{ err error }
+
 // runUpdateCmd exits alt-screen so the install script can prompt for sudo password.
 func runUpdateCmd() tea.Cmd {
 	cmd := exec.Command("bash", "-c",
 		"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
 	)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		var lines []string
-		if err != nil {
-			return runResultMsg{lines: lines, err: fmt.Errorf("update failed: %w", err)}
-		}
-		lines = append(lines, styleSuccess.Render("✓ updated — restart zipp to use the new version"))
-		return runResultMsg{lines: lines}
+		return updateDoneMsg{err: err}
 	})
 }
