@@ -999,13 +999,13 @@ func (m model) nestMenuItems() []string {
 		items = append(items, "Logout from Tailscale")
 		if m.nestTSStatus.running {
 			items = append(items, "Disable Tailscale")
-			if m.config.Nest != nil {
-				items = append(items, "Change server code")
-			} else {
-				items = append(items, "Enter server code")
-			}
 		} else {
 			items = append(items, "Enable Tailscale")
+		}
+		if m.config.Nest != nil {
+			items = append(items, "Change server code")
+		} else {
+			items = append(items, "Enter server code")
 		}
 	}
 	items = append(items, "Back")
