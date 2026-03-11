@@ -61,28 +61,24 @@ var (
 )
 
 var flyWingFrames = []string{
-	` \.'||'./`, // wings normal
-	`  .'||'. `, // wings up
-	` ~.'||'.~`, // buzzing
-	` /.'||'.\`, // wings down
+	`  )()(`, // wings spread
+	`  /\/\`, // wings up
+	`  ~~~~`, // buzzing
+	`  \/\/`, // wings down
 }
-
-var flySosakFrames = []string{
-	`   !__!`, // flat
-	`   !,,!`, // extended
-	`   !__!`,
-	`   !,,!`,
-}
-
-var styleSosak = lipgloss.NewStyle().Foreground(colorRed)
 
 func renderFlyLines(frame int) string {
-	idx := frame % 4
-	return styleSosak.Render(flySosakFrames[idx]) + "\n" +
-		styleLogo.Render(`  (`) + styleLogoAccent.Render(`@`) + styleLogo.Render(`)(`) + styleLogoAccent.Render(`@`) + styleLogo.Render(`)`) + "\n" +
-		styleLogo.Render(flyWingFrames[idx]) + "\n" +
-		styleLogo.Render(`-:  ::  :-`) + "\n" +
-		styleLogo.Render(`/'..''..'.\`)
+	idx := frame % len(flyWingFrames)
+	return styleLogo.Render(flyWingFrames[idx]) + "\n" +
+		styleLogo.Render(" ( ") + styleLogoAccent.Render("●●") + styleLogo.Render(" )") + "\n" +
+		styleLogo.Render(`  \──/`) + "\n" +
+		styleLogo.Render(`  /||\`)
+}
+
+// keyHint renders a colored key + dim label for the hint bar.
+func keyHint(key string, label string, c lipgloss.Color) string {
+	return lipgloss.NewStyle().Foreground(c).Bold(true).Render(key) +
+		styleDim.Render(" "+label)
 }
 
 // renderFlyOnly returns just the fly with no name/version beside it.
@@ -119,7 +115,7 @@ func buildHeader(subtitle string, frame int) string {
 
 	return lipgloss.JoinHorizontal(lipgloss.Center,
 		logo+"  ",
-		"\n\n"+right,
+		"\n\n\n"+right,
 	) + "\n"
 }
 

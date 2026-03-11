@@ -673,7 +673,16 @@ func (m model) viewJobs() string {
 		}
 	}
 
-	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · r restore · e edit · d delete · t toggle · esc back"))
+	sep := styleDim.Render("  ·  ")
+	b.WriteString("\n  " + strings.Join([]string{
+		keyHint("↑↓", "navigate", colorMuted),
+		keyHint("enter", "run", colorGreen),
+		keyHint("r", "restore", colorViolet),
+		keyHint("e", "edit", colorYellow),
+		keyHint("d", "delete", colorRed),
+		keyHint("t", "toggle", colorFuchsia),
+		keyHint("esc", "back", colorMuted),
+	}, sep))
 	return b.String()
 }
 
