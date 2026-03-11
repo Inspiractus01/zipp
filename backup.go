@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +13,7 @@ import (
 	"time"
 )
 
-func runJob(job *Job, output chan<- string) error {
+func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 	src := expandPath(job.Source)
 	baseDir := expandPath(job.Destination)
 
@@ -21,10 +23,19 @@ func runJob(job *Job, output chan<- string) error {
 		return fmt.Errorf("could not create destination dir: %w", err)
 	}
 
+	var err error
 	if job.Compress {
-		return runJobCompressed(job, src, baseDir, snapshot, output)
+		err = runJobCompressed(job, src, baseDir, snapshot, output)
+	} else {
+		err = runJobRsync(job, src, baseDir, snapshot, output)
 	}
-	return runJobRsync(job, src, baseDir, snapshot, output)
+	if err != nil {
+		return err
+	}
+	if job.NestEnabled && nest != nil {
+		uploadToNest(job, src, snapshot, nest, output)
+	}
+	return nil
 }
 
 func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) error {
@@ -214,6 +225,43 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func uploadToNest(job *Job, src, snapshot string, nest *NestConfig, output chan<- string) {
+	output <- "  uploading to nest..."
+
+	// compress source to memory
+	srcDir := strings.TrimSuffix(src, "/")
+	cmd := exec.Command("tar", "-czf", "-", "-C", srcDir, ".")
+	if runtime.GOOS == "darwin" {
+		cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+	}
+	data, err := cmd.Output()
+	if err != nil {
+		output <- fmt.Sprintf("  ✗ nest upload failed (compress): %v", err)
+		return
+	}
+
+	url := "http://" + nest.Address + "/backups/" + job.Name
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		output <- fmt.Sprintf("  ✗ nest upload failed: %v", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+nest.Token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		output <- fmt.Sprintf("  ✗ nest upload failed: %v", err)
+		return
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		output <- fmt.Sprintf("  ✗ nest upload failed: status %d", resp.StatusCode)
+		return
+	}
+	output <- fmt.Sprintf("  ✓ uploaded to nest (%s)", formatBytes(int64(len(data))))
 }
 
 func expandPath(p string) string {

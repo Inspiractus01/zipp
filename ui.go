@@ -261,7 +261,7 @@ func runAllCmd(cfg *Config) tea.Cmd {
 				if !job.Enabled {
 					continue
 				}
-				if err := runJob(job, ch); err != nil {
+				if err := runJob(job, cfg.Nest, ch); err != nil {
 					ch <- styleError.Render("✗ " + err.Error())
 					runErr = err
 				}
@@ -283,7 +283,7 @@ func runJobCmd(cfg *Config, job *Job) tea.Cmd {
 		go func() {
 			defer close(ch)
 			var runErr error
-			if err := runJob(job, ch); err != nil {
+			if err := runJob(job, cfg.Nest, ch); err != nil {
 				ch <- styleError.Render("✗ " + err.Error())
 				runErr = err
 			}
@@ -382,6 +382,12 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
 			job.Enabled = !job.Enabled
+			m.config.save()
+		}
+	case "n":
+		if len(m.config.Jobs) > 0 && m.config.Nest != nil {
+			job := m.config.Jobs[m.cursor]
+			job.NestEnabled = !job.NestEnabled
 			m.config.save()
 		}
 	case "r":
@@ -686,6 +692,9 @@ func (m model) viewJobs() string {
 			}
 			if job.Compress {
 				nameStr += styleDim.Render(" [zip]")
+			if job.NestEnabled {
+				nameStr += styleSuccess.Render(" [nest]")
+			}
 			}
 
 			next := styleDim.Render(job.nextRun())
@@ -708,6 +717,7 @@ func (m model) viewJobs() string {
 		keyHint("e", "edit", colorYellow),
 		keyHint("d", "delete", colorRed),
 		keyHint("t", "toggle", colorFuchsia),
+		keyHint("n", "nest", colorGreen),
 		keyHint("esc", "back", colorMuted),
 	}, sep))
 	return b.String()

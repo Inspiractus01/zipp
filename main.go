@@ -46,7 +46,7 @@ func runCLI(args []string) {
 		ran := 0
 		for _, job := range cfg.Jobs {
 			if job.isDue() {
-				if err := runJob(job, out); err != nil {
+				if err := runJob(job, cfg.Nest, out); err != nil {
 					fmt.Fprintf(os.Stderr, "job %q failed: %v\n", job.Name, err)
 				}
 				ran++
@@ -74,7 +74,7 @@ func runCLI(args []string) {
 			if !job.Enabled {
 				continue
 			}
-			if err := runJob(job, out); err != nil {
+			if err := runJob(job, cfg.Nest, out); err != nil {
 				fmt.Fprintf(os.Stderr, "job %q failed: %v\n", job.Name, err)
 			}
 		}

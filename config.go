@@ -20,6 +20,7 @@ type Job struct {
 	LastRun       time.Time `json:"lastRun"`
 	Enabled       bool      `json:"enabled"`
 	Compress      bool      `json:"compress"`
+	NestEnabled   bool      `json:"nestEnabled,omitempty"`
 }
 
 type NestConfig struct {
