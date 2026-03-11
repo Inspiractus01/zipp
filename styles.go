@@ -3,27 +3,29 @@ package main
 import "github.com/charmbracelet/lipgloss"
 
 var (
-	colorGreen  = lipgloss.Color("#96f97b")
-	colorYellow = lipgloss.Color("#ffd93d")
-	colorRed    = lipgloss.Color("#ff6b6b")
-	colorGray   = lipgloss.Color("#555555")
-	colorWhite  = lipgloss.Color("#efefef")
-	colorDark   = lipgloss.Color("#1c1c1c")
-
-	styleHeader = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(colorGreen).
-			PaddingBottom(1)
-
-	styleDim = lipgloss.NewStyle().
-			Foreground(colorGray)
+	colorPurple  = lipgloss.Color("#451ce8")
+	colorViolet  = lipgloss.Color("#7b5ef8")
+	colorLavender = lipgloss.Color("#a78bfa")
+	colorFuchsia = lipgloss.Color("#c084fc")
+	colorGray    = lipgloss.Color("#4b5563")
+	colorMuted   = lipgloss.Color("#6b7280")
+	colorWhite   = lipgloss.Color("#e2e8f0")
+	colorGreen   = lipgloss.Color("#86efac")
+	colorRed     = lipgloss.Color("#f87171")
+	colorYellow  = lipgloss.Color("#fbbf24")
 
 	styleSelected = lipgloss.NewStyle().
-			Foreground(colorGreen).
+			Foreground(colorLavender).
 			Bold(true)
 
 	styleNormal = lipgloss.NewStyle().
 			Foreground(colorWhite)
+
+	styleDim = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	styleSuccess = lipgloss.NewStyle().
+			Foreground(colorGreen)
 
 	styleWarning = lipgloss.NewStyle().
 			Foreground(colorYellow)
@@ -31,37 +33,58 @@ var (
 	styleError = lipgloss.NewStyle().
 			Foreground(colorRed)
 
-	styleSuccess = lipgloss.NewStyle().
-			Foreground(colorGreen)
-
-	styleBox = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorGray).
-			Padding(0, 1)
-
 	styleLabel = lipgloss.NewStyle().
-			Foreground(colorGray).
+			Foreground(colorMuted).
 			Width(16)
-
-	styleInputActive = lipgloss.NewStyle().
-				Foreground(colorGreen).
-				Bold(true)
-
-	styleInputInactive = lipgloss.NewStyle().
-				Foreground(colorGray)
 
 	styleHint = lipgloss.NewStyle().
 			Foreground(colorGray).
-			Italic(true).
 			PaddingTop(1)
+
+	styleUpdate = lipgloss.NewStyle().
+			Foreground(colorFuchsia).
+			Bold(true)
+
+	styleLogo = lipgloss.NewStyle().
+			Foreground(colorViolet)
+
+	styleLogoAccent = lipgloss.NewStyle().
+			Foreground(colorPurple).
+			Bold(true)
+
+	styleVersion = lipgloss.NewStyle().
+			Foreground(colorGray)
 )
 
-func header(subtitle string) string {
-	title := styleHeader.Render("🪰 Zipp")
+const asciiLogo = `  )()(
+ ( ●● )
+  \──/
+  /||\`
+
+func renderHeader(subtitle string) string {
+	logo := styleLogo.Render("  )()(") + "\n" +
+		styleLogo.Render(" ( ") + styleLogoAccent.Render("●●") + styleLogo.Render(" )") + "\n" +
+		styleLogo.Render(`  \──/`) + "\n" +
+		styleLogo.Render(`  /||\`)
+
+	name := lipgloss.NewStyle().
+		Foreground(colorLavender).
+		Bold(true).
+		Render("zipp")
+
+	ver := styleVersion.Render("v" + version)
+
+	var sub string
 	if subtitle != "" {
-		title += styleHeader.Copy().Bold(false).Foreground(colorGray).Render("  /  " + subtitle)
+		sub = "\n" + styleDim.Render("  "+subtitle)
 	}
-	ver := styleDim.Render("v" + version)
-	gap := lipgloss.NewStyle().Width(40 - lipgloss.Width(title) - lipgloss.Width(ver)).Render("")
-	return title + gap + ver + "\n"
+
+	right := lipgloss.JoinVertical(lipgloss.Left,
+		name+" "+ver+sub,
+	)
+
+	return lipgloss.JoinHorizontal(lipgloss.Center,
+		logo+"  ",
+		"\n\n"+right,
+	) + "\n"
 }

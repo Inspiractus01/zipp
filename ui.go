@@ -25,11 +25,16 @@ type runResultMsg struct {
 	err   error
 }
 
+type updateCheckMsg updateResult
+
 type model struct {
-	page   page
-	cursor int
-	config *Config
-	err    error
+	page      page
+	cursor    int
+	config    *Config
+	err       error
+
+	updateInfo    updateResult
+	schedulerInfo schedulerStatus
 
 	// add job form
 	formStep   int
@@ -43,7 +48,7 @@ type model struct {
 	deleteTarget *Job
 }
 
-var menuItems = []string{"Jobs", "Run all", "Add job", "Quit"}
+var menuItems = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
 
 func newModel(cfg *Config) model {
 	return model{
@@ -53,7 +58,10 @@ func newModel(cfg *Config) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return tea.Batch(
+		func() tea.Msg { return updateCheckMsg(checkForUpdate()) },
+		checkSchedulerCmd(),
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -92,6 +100,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case pageConfirmDelete:
 			return m.updateConfirmDelete(msg)
 		}
+
+	case updateCheckMsg:
+		m.updateInfo = updateResult(msg)
+		return m, nil
+
+	case schedulerCheckMsg:
+		m.schedulerInfo = schedulerStatus(msg)
+		return m, nil
 
 	case runResultMsg:
 		m.runDone = true
@@ -135,6 +151,11 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runOutput = nil
 			m.runDone = false
 			return m, runAllCmd(m.config)
+		case "Setup":
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			return m, setupSchedulerCmd()
 		case "Quit":
 			return m, tea.Quit
 		}
@@ -323,7 +344,7 @@ func (m model) View() string {
 
 func (m model) viewMenu() string {
 	var b strings.Builder
-	b.WriteString(header(""))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	for i, item := range menuItems {
@@ -338,13 +359,27 @@ func (m model) viewMenu() string {
 		b.WriteString("\n")
 	}
 
+	b.WriteString("\n")
+	if !m.schedulerInfo.active {
+		b.WriteString("  " + styleError.Render("⚠ scheduler not running") +
+			styleDim.Render("  → select Setup to fix") + "\n")
+	} else {
+		b.WriteString("  " + styleSuccess.Render("✓ scheduler active") +
+			styleDim.Render(" via "+m.schedulerInfo.method) + "\n")
+	}
+
+	if m.updateInfo.hasUpdate {
+		b.WriteString("  " + styleUpdate.Render("↑ update available: v"+m.updateInfo.latest) + "\n")
+		b.WriteString("  " + styleDim.Render("  curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash") + "\n")
+	}
+
 	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · q quit"))
 	return b.String()
 }
 
 func (m model) viewJobs() string {
 	var b strings.Builder
-	b.WriteString(header("Jobs"))
+	b.WriteString(renderHeader("Jobs"))
 	b.WriteString("\n")
 
 	if len(m.config.Jobs) == 0 {
@@ -387,7 +422,7 @@ func (m model) viewJobs() string {
 
 func (m model) viewAdd() string {
 	var b strings.Builder
-	b.WriteString(header("Add job"))
+	b.WriteString(renderHeader("Add job"))
 	b.WriteString("\n")
 
 	for i, label := range formLabels {
@@ -412,7 +447,7 @@ func (m model) viewAdd() string {
 
 func (m model) viewRun() string {
 	var b strings.Builder
-	b.WriteString(header("Running"))
+	b.WriteString(renderHeader("Running"))
 	b.WriteString("\n")
 
 	for _, line := range m.runOutput {
@@ -430,7 +465,7 @@ func (m model) viewRun() string {
 
 func (m model) viewConfirmDelete() string {
 	var b strings.Builder
-	b.WriteString(header("Delete job"))
+	b.WriteString(renderHeader("Delete job"))
 	b.WriteString("\n")
 
 	if m.deleteTarget != nil {
