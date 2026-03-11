@@ -354,7 +354,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, runUpdateCmd()
 		case "Nest":
 			ti := textinput.New()
-			ti.Placeholder = "zipp-nest address  e.g. 100.86.253.68:9090"
+			ti.Placeholder = "short code (570-0932) or full IP:port"
 			ti.Width = 52
 			if m.config.Nest != nil {
 				ti.SetValue(m.config.Nest.Address)
@@ -952,12 +952,17 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.nestErr = ""
 		return m, nil
 	case "enter":
-		address := strings.TrimSpace(m.nestInput.Value())
-		if address == "" {
+		raw := strings.TrimSpace(m.nestInput.Value())
+		if raw == "" {
 			m.config.Nest = nil
 			m.nestConnected = false
 			m.config.save()
 			m.page = pageMenu
+			return m, nil
+		}
+		address, err := decodeNestCode(raw)
+		if err != nil {
+			m.nestErr = err.Error()
 			return m, nil
 		}
 		m.config.Nest = &NestConfig{Address: address}
@@ -993,7 +998,7 @@ func (m model) viewNest() string {
 	// address input
 	b.WriteString(styleDim.Render("  zipp-nest address:") + "\n")
 	b.WriteString("  " + m.nestInput.View() + "\n")
-	b.WriteString(styleDim.Render("  (e.g. 100.86.253.68:9090  — from zipp-nest Connection info)") + "\n")
+	b.WriteString(styleDim.Render("  (short code like 570-0932, or full IP:port)") + "\n")
 
 	if m.nestErr != "" {
 		b.WriteString("\n  " + styleError.Render("✗ "+m.nestErr) + "\n")
