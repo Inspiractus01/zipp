@@ -1,37 +1,37 @@
 #!/bin/bash
 set -e
 
-REPO="inspiractus01/zipp"
-BIN_NAME="zipp"
+REPO="Inspiractus01/zipp"
 INSTALL_DIR="/usr/local/bin"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case $ARCH in
-  x86_64) ARCH="amd64" ;;
-  arm64|aarch64) ARCH="arm64" ;;
+  x86_64)          ARCH="amd64" ;;
+  arm64|aarch64)   ARCH="arm64" ;;
   *) echo "unsupported arch: $ARCH"; exit 1 ;;
 esac
 
-LATEST=$(curl -sf "https://raw.githubusercontent.com/$REPO/main/latest.txt" || echo "")
-if [ -z "$LATEST" ]; then
-  echo "could not fetch latest version"
-  exit 1
-fi
+URL="https://github.com/$REPO/releases/latest/download/zipp-${OS}-${ARCH}"
 
-URL="https://github.com/$REPO/releases/download/$LATEST/zipp-${OS}-${ARCH}"
+echo "🪰 installing Zipp..."
+echo "   platform: ${OS}/${ARCH}"
+
 TMP=$(mktemp)
-
-echo "🪰 installing Zipp $LATEST..."
-curl -sL "$URL" -o "$TMP"
+curl -sL --fail "$URL" -o "$TMP" || {
+  echo "download failed — check https://github.com/$REPO/releases"
+  exit 1
+}
 chmod +x "$TMP"
-sudo mv "$TMP" "$INSTALL_DIR/$BIN_NAME"
+sudo mv "$TMP" "$INSTALL_DIR/zipp"
 
-echo "✓ installed to $INSTALL_DIR/$BIN_NAME"
+echo "✓ installed to $INSTALL_DIR/zipp"
+echo "  run 'zipp --version' to verify"
 
 # systemd on linux
 if [ "$OS" = "linux" ] && command -v systemctl &>/dev/null; then
-  echo "setting up systemd timer..."
+  echo ""
+  echo "setting up systemd timer (runs every hour)..."
 
   sudo tee /etc/systemd/system/zipp.service > /dev/null << EOF
 [Unit]
@@ -58,8 +58,8 @@ EOF
 
   sudo systemctl daemon-reload
   sudo systemctl enable --now zipp.timer
-  echo "✓ systemd timer enabled (runs every hour)"
+  echo "✓ systemd timer enabled"
 fi
 
 echo ""
-echo "run 'zipp' to open the UI"
+echo "🪰 done! run 'zipp' to open the UI"
