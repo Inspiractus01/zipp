@@ -132,6 +132,7 @@ func (m model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		func() tea.Msg { return updateCheckMsg(checkForUpdate()) },
 		checkSchedulerCmd(),
+		tickCmd(),
 	}
 	if m.config.Nest != nil {
 		cmds = append(cmds, nestHealthCmd(m.config.Nest.Address))
@@ -258,10 +259,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Animation tick.
 	case tickMsg:
 		m.animFrame++
-		if !m.runDone {
-			return m, tickCmd()
-		}
-		return m, nil
+		return m, tickCmd()
 
 	// Non-streaming result (setup, update cmds).
 	case runResultMsg:
@@ -688,7 +686,10 @@ func (m model) viewMenu() string {
 			b.WriteString(styleDim.Render(fmt.Sprintf("   %d total", len(m.config.Jobs))))
 		}
 		if item == "Nest" {
-			if m.nestConnected {
+			if m.nestChecking {
+				dots := []string{"·  ", "·· ", "···"}
+				b.WriteString(styleDim.Render("   checking " + dots[m.animFrame%len(dots)]))
+			} else if m.nestConnected {
 				b.WriteString(styleSuccess.Render("   ✓ connected"))
 			} else if m.config.Nest != nil {
 				b.WriteString(styleWarning.Render("   ○ " + m.config.Nest.Address))
