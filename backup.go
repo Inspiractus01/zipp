@@ -16,28 +16,43 @@ import (
 func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 	src := expandPath(job.Source)
 	baseDir := expandPath(job.Destination)
-
 	snapshot := time.Now().Format("2006-01-02_15-04-05")
 
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return fmt.Errorf("could not create destination dir: %w", err)
+	nestAvailable := nest != nil && !nest.Disabled
+	mode := job.mode()
+	doLocal := mode == "local" || mode == "both"
+	doNest := (mode == "nest" || mode == "both") && nestAvailable
+
+	if mode == "nest" && !nestAvailable {
+		output <- styleDim.Render("  nest not available, skipping")
+		return nil
 	}
 
-	var err error
-	if job.Compress {
-		err = runJobCompressed(job, src, baseDir, snapshot, output)
-	} else {
-		err = runJobRsync(job, src, baseDir, snapshot, output)
+	if doLocal {
+		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			return fmt.Errorf("could not create destination dir: %w", err)
+		}
+		if job.Compress {
+			if err := runJobCompressed(job, src, baseDir, snapshot, output); err != nil {
+				return err
+			}
+		} else {
+			if err := runJobRsync(job, src, baseDir, snapshot, output); err != nil {
+				return err
+			}
+		}
 	}
-	if err != nil {
-		return err
-	}
-	if job.NestEnabled && nest != nil && !nest.Disabled {
+
+	if doNest {
+		if !doLocal {
+			job.LastRun = time.Now()
+		}
 		uploadToNest(job, src, snapshot, nest, output)
 		if job.MaxSnapshots > 0 {
 			pruneNestSnapshots(job.Name, nest.Address, job.MaxSnapshots, output)
 		}
 	}
+
 	return nil
 }
 

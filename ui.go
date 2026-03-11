@@ -450,9 +450,17 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.config.save()
 		}
 	case "n":
-		if len(m.config.Jobs) > 0 && m.config.Nest != nil {
+		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
-			job.NestEnabled = !job.NestEnabled
+			switch job.mode() {
+			case "local":
+				job.NestMode = "nest"
+			case "nest":
+				job.NestMode = "both"
+			default:
+				job.NestMode = "local"
+			}
+			job.NestEnabled = false // clear legacy field
 			m.config.save()
 		}
 	case "r":
@@ -763,8 +771,13 @@ func (m model) viewJobs() string {
 			if job.Compress {
 				nameStr += styleDim.Render(" [zip]")
 			}
-			if job.NestEnabled {
-				nameStr += styleSuccess.Render(" ★")
+			switch job.mode() {
+			case "both":
+				nameStr += styleSuccess.Render(" [nest+local]")
+			case "nest":
+				nameStr += styleSuccess.Render(" [nest]")
+			default:
+				nameStr += styleDim.Render(" [local]")
 			}
 
 			next := styleDim.Render(job.nextRun())
@@ -783,11 +796,13 @@ func (m model) viewJobs() string {
 	b.WriteString("\n  " + strings.Join([]string{
 		keyHint("↑↓", "navigate", colorMuted),
 		keyHint("enter", "run", colorGreen),
-		keyHint("r", "restore", colorViolet),
 		keyHint("e", "edit", colorYellow),
 		keyHint("d", "delete", colorRed),
-		keyHint("t", "toggle", colorFuchsia),
-		keyHint("n", "nest", colorGreen),
+	}, sep))
+	b.WriteString("\n  " + strings.Join([]string{
+		keyHint("r", "restore", colorViolet),
+		keyHint("t", "on/off", colorFuchsia),
+		keyHint("n", "mode", colorGreen),
 		keyHint("esc", "back", colorMuted),
 	}, sep))
 	return b.String()

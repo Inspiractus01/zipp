@@ -18,7 +18,19 @@ type Job struct {
 	LastRun       time.Time `json:"lastRun"`
 	Enabled       bool      `json:"enabled"`
 	Compress      bool      `json:"compress"`
-	NestEnabled   bool      `json:"nestEnabled,omitempty"`
+	NestEnabled   bool      `json:"nestEnabled,omitempty"` // legacy, use NestMode
+	NestMode      string    `json:"nestMode,omitempty"`    // "local", "nest", "both"
+}
+
+// mode returns the effective backup mode, migrating legacy NestEnabled.
+func (j *Job) mode() string {
+	if j.NestMode != "" {
+		return j.NestMode
+	}
+	if j.NestEnabled {
+		return "both"
+	}
+	return "local"
 }
 
 type NestConfig struct {
