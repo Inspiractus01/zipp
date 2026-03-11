@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>zipp — simple, fast backups</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d14;
+      --bg2:       #12121e;
+      --bg3:       #1a1a2e;
+      --border:    #1e1e30;
+      --muted:     #6b7280;
+      --dim:       #4b5563;
+      --white:     #e2e8f0;
+      --violet:    #7b5ef8;
+      --lavender:  #a78bfa;
+      --purple:    #451ce8;
+      --teal:      #0d9488;
+      --teal-l:    #5eead4;
+      --green:     #86efac;
+      --red:       #f87171;
+      --yellow:    #fbbf24;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+      font-size: 15px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── layout ── */
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+
+    section { padding: 80px 0; }
+    section + section { border-top: 1px solid var(--border); }
+
+    /* ── nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(13,13,20,.85);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex; align-items: center; gap: 32px;
+    }
+    nav .logo { color: var(--lavender); font-weight: 700; font-size: 16px; letter-spacing: .02em; }
+    nav a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color .15s; }
+    nav a:hover { color: var(--white); }
+    nav .spacer { flex: 1; }
+    nav .badge {
+      font-size: 12px; padding: 4px 10px;
+      border: 1px solid var(--violet);
+      border-radius: 4px;
+      color: var(--lavender);
+    }
+
+    /* ── hero ── */
+    .hero { padding: 96px 0 72px; }
+
+    .ascii-fly {
+      color: var(--violet);
+      font-size: 15px;
+      line-height: 1.45;
+      white-space: pre;
+      display: inline-block;
+    }
+    .ascii-fly .accent { color: var(--purple); font-weight: 700; }
+
+    .hero-inner {
+      display: flex; align-items: center; gap: 40px;
+      flex-wrap: wrap;
+    }
+    .hero-text h1 {
+      font-size: 42px; font-weight: 700; letter-spacing: -.01em;
+      color: var(--lavender);
+      line-height: 1.15;
+    }
+    .hero-text h1 span { color: var(--violet); }
+    .hero-text .tagline {
+      color: var(--muted); margin-top: 12px; font-size: 15px;
+    }
+
+    .hero-actions { margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+    .btn {
+      display: inline-block; text-decoration: none;
+      padding: 10px 22px; border-radius: 5px;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--violet); color: #fff; border: none; }
+    .btn-outline { background: transparent; color: var(--lavender); border: 1px solid var(--violet); }
+
+    /* ── terminal block ── */
+    .term {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-top: 28px;
+      position: relative;
+      overflow-x: auto;
+    }
+    .term-dots {
+      display: flex; gap: 6px; margin-bottom: 14px;
+    }
+    .term-dots span {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--dim);
+    }
+    .term code {
+      color: var(--white); font-size: 14px;
+      white-space: pre;
+    }
+    .term .prompt { color: var(--violet); }
+    .term .comment { color: var(--muted); }
+    .term .success { color: var(--green); }
+    .term .dim { color: var(--muted); }
+
+    /* copy button */
+    .copy-btn {
+      position: absolute; top: 14px; right: 14px;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--muted); font-family: inherit; font-size: 12px;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      transition: color .15s, border-color .15s;
+    }
+    .copy-btn:hover { color: var(--white); border-color: var(--violet); }
+
+    /* ── features grid ── */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 40px;
+    }
+    .feat {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 22px;
+    }
+    .feat .icon { font-size: 18px; margin-bottom: 8px; }
+    .feat h3 { font-size: 14px; color: var(--lavender); margin-bottom: 4px; }
+    .feat p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+    /* ── section headings ── */
+    .section-label {
+      font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 28px; font-weight: 700; letter-spacing: -.01em;
+      line-height: 1.2; margin-bottom: 14px;
+    }
+    .desc { color: var(--muted); font-size: 14px; max-width: 560px; line-height: 1.7; }
+
+    /* ── nest section ── */
+    .nest-section { background: linear-gradient(180deg, var(--bg) 0%, #0a1a18 100%); }
+
+    .ascii-nest {
+      color: var(--teal);
+      font-size: 15px;
+      line-height: 1.45;
+      white-space: pre;
+      display: inline-block;
+    }
+    .ascii-nest .accent { color: var(--teal-l); font-weight: 700; }
+
+    .nest-hero {
+      display: flex; align-items: center; gap: 36px;
+      flex-wrap: wrap; margin-bottom: 40px;
+    }
+    .nest-hero h2 { color: var(--teal-l); }
+    .nest-hero .intro-badge {
+      display: inline-block;
+      font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--teal); border: 1px solid var(--teal);
+      border-radius: 4px; padding: 3px 8px; margin-bottom: 10px;
+    }
+
+    .nest-features { margin-top: 0; }
+    .nest-features .feat { border-color: #1a2e2a; }
+    .nest-features .feat h3 { color: var(--teal-l); }
+
+    .btn-nest-primary { background: var(--teal); color: #fff; border: none; }
+    .btn-nest-outline { background: transparent; color: var(--teal-l); border: 1px solid var(--teal); }
+
+    /* ── how it works ── */
+    .steps { margin-top: 36px; display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: flex; gap: 20px; align-items: flex-start;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      min-width: 28px; height: 28px;
+      border: 1px solid var(--teal);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--teal-l); font-weight: 700;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .step-body h4 { font-size: 14px; color: var(--white); margin-bottom: 4px; }
+    .step-body p { font-size: 13px; color: var(--muted); }
+
+    /* ── divider ── */
+    .rule { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ── footer ── */
+    footer {
+      padding: 40px 24px;
+      color: var(--dim);
+      font-size: 13px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 12px;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--white); }
+
+    /* ── inline code ── */
+    code.inline {
+      background: var(--bg3); color: var(--lavender);
+      padding: 2px 6px; border-radius: 3px; font-size: 13px;
+    }
+
+    /* ── misc ── */
+    .mt4 { margin-top: 16px; }
+    .mt8 { margin-top: 32px; }
+    .green { color: var(--green); }
+    .teal  { color: var(--teal-l); }
+    @media (max-width: 540px) {
+      .hero-text h1 { font-size: 30px; }
+      nav .badge { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── nav ── -->
+<nav>
+  <span class="logo">zipp</span>
+  <a href="#nest">zipp-nest</a>
+  <a href="#install">install</a>
+  <a href="https://github.com/Inspiractus01/zipp" target="_blank">github</a>
+  <span class="spacer"></span>
+  <span class="badge">v1.2.29</span>
+</nav>
+
+<!-- ── hero ── -->
+<div class="wrap">
+<section class="hero">
+  <div class="hero-inner">
+    <pre class="ascii-fly"><span>  )()( </span>
+<span> ( <span class="accent">●●</span> )</span>
+<span>  \──/ </span>
+<span>  /||\ </span></pre>
+    <div class="hero-text">
+      <h1><span>zipp</span><br>simple, fast backups.</h1>
+      <p class="tagline">
+        Snapshots. Scheduling. Restore.<br>
+        A terminal app that stays out of your way.
+      </p>
+      <div class="hero-actions">
+        <a href="#install" class="btn btn-primary">Get started</a>
+        <a href="https://github.com/Inspiractus01/zipp" target="_blank" class="btn btn-outline">GitHub ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- mini terminal preview -->
+  <div class="term">
+    <div class="term-dots"><span></span><span></span><span></span></div>
+    <code><span class="dim">  )()( </span>
+<span class="dim"> ( ●● )  </span><span style="color:var(--lavender);font-weight:700">zipp</span> <span class="dim">v1.2.29</span>
+<span class="dim">  \──/   Jobs</span>
+
+<span class="success">  ▸ ✓  Documents backup [zip]  [nest+local]</span>
+<span class="dim">    ✓  Photos             [zip]  [local]      in 3h</span>
+<span class="dim">    ✓  dotfiles                  [local]      manual</span>
+
+<span class="dim">  ↑↓ navigate · enter run · e edit · d delete</span>
+<span class="dim">  r restore  · t on/off  · n mode  · esc back</span></code>
+  </div>
+</section>
+
+<!-- ── features ── -->
+<section>
+  <p class="section-label">what you get</p>
+  <h2>Everything you need.<br>Nothing you don't.</h2>
+  <p class="desc">zipp runs entirely on your machine. No cloud accounts, no subscriptions, no background services you didn't ask for.</p>
+
+  <div class="features">
+    <div class="feat">
+      <div class="icon">📸</div>
+      <h3>Snapshots</h3>
+      <p>Every backup creates a timestamped snapshot. Keep as many as you want, auto-prune the rest.</p>
+    </div>
+    <div class="feat">
+      <div class="icon">⏱</div>
+      <h3>Scheduled</h3>
+      <p>Set an interval per job. zipp installs a launchd / systemd timer — no cron wrangling.</p>
+    </div>
+    <div class="feat">
+      <div class="icon">🗜</div>
+      <h3>Compressed</h3>
+      <p>Toggle <code class="inline">[zip]</code> mode per job to store archives instead of folders. Saves significant space.</p>
+    </div>
+    <div class="feat">
+      <div class="icon">↩</div>
+      <h3>One-click restore</h3>
+      <p>Browse snapshots and restore any of them directly from the TUI. No extra tools needed.</p>
+    </div>
+    <div class="feat">
+      <div class="icon">📡</div>
+      <h3>Remote ready</h3>
+      <p>Pair with zipp-nest to push backups over Tailscale to any machine on your private network.</p>
+    </div>
+    <div class="feat">
+      <div class="icon">🖥</div>
+      <h3>macOS &amp; Linux</h3>
+      <p>Single binary, installs in seconds. Works on your laptop and on your server.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── install ── -->
+<section id="install">
+  <p class="section-label">installation</p>
+  <h2>One line install.</h2>
+  <p class="desc">The installer downloads a prebuilt binary for your OS and architecture, places it in <code class="inline">/usr/local/bin</code>, and you're done.</p>
+
+  <div class="term mt8">
+    <div class="term-dots"><span></span><span></span><span></span></div>
+    <button class="copy-btn" onclick="copy(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash')">copy</button>
+    <code><span class="prompt">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash
+
+<span class="success">  ✓ zipp v1.2.29 installed</span>
+<span class="dim">  run: zipp</span></code>
+  </div>
+</section>
+</div><!-- /wrap -->
+
+<!-- ── nest section ── -->
+<section class="nest-section" id="nest">
+<div class="wrap">
+
+  <div class="nest-hero">
+    <pre class="ascii-nest"><span>  ,~~~~~,</span>
+<span> (~</span><span class="accent">~~~~~</span><span>~)</span>
+<span>  `~~~~~`</span></pre>
+    <div>
+      <span class="intro-badge">introducing</span>
+      <h2>zipp-nest</h2>
+      <p class="desc">
+        Your backups, over the internet.<br>
+        A self-hosted backup server that receives uploads from zipp<br>and stores them on any machine you control.
+      </p>
+      <div class="hero-actions mt4">
+        <a href="#nest-install" class="btn btn-nest-primary">Install on server</a>
+        <a href="https://github.com/Inspiractus01/zipp-nest" target="_blank" class="btn btn-nest-outline">GitHub ↗</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="features nest-features">
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">🔒</div>
+      <h3>Private by design</h3>
+      <p>Runs over <a href="https://tailscale.com" target="_blank" style="color:var(--teal-l);text-decoration:none">Tailscale</a> — your backups never touch a third-party server. Your network, your rules.</p>
+    </div>
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">🗂</div>
+      <h3>Per-job storage</h3>
+      <p>Each job gets its own folder on the server. Browse the log from the TUI to see every upload.</p>
+    </div>
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">✂</div>
+      <h3>Auto-prune</h3>
+      <p>When zipp uploads a new snapshot, it automatically removes old ones on the server — matching your local <code class="inline">max snapshots</code> setting.</p>
+    </div>
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">⚙</div>
+      <h3>Configurable</h3>
+      <p>Set the storage path and port from the TUI. Changes apply immediately — the server restarts automatically.</p>
+    </div>
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">🔄</div>
+      <h3>Three backup modes</h3>
+      <p>Per job: <code class="inline">[local]</code> only, <code class="inline">[nest]</code> only (remote, saves local disk), or <code class="inline">[nest+local]</code> for both.</p>
+    </div>
+    <div class="feat">
+      <div class="icon" style="color:var(--teal-l)">📋</div>
+      <h3>Built-in logs</h3>
+      <p>The server logs every upload with timestamp and size. View the full history without leaving the TUI.</p>
+    </div>
+  </div>
+
+  <!-- how it works -->
+  <div class="mt8">
+    <p class="section-label">how it works</p>
+    <h2 class="teal">Simple setup, no config files.</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h4>Install zipp on your client machine</h4>
+          <p>One curl command, binary drops into <code class="inline">/usr/local/bin</code>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h4>Install zipp-nest on your server</h4>
+          <p>Same process. Run <code class="inline">zipp-nest</code> and press <strong style="color:var(--teal-l)">Start server</strong> — it registers as a background service.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h4>Connect with Tailscale</h4>
+          <p>Enable Tailscale on both machines. zipp-nest shows you a short connection code — paste it into zipp on the client.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h4>Set your backup mode and run</h4>
+          <p>Press <code class="inline">n</code> on any job to cycle through <code class="inline">[local]</code> <code class="inline">[nest]</code> <code class="inline">[nest+local]</code>. That's it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- nest install -->
+  <div class="mt8" id="nest-install">
+    <p class="section-label">installation</p>
+    <h2 class="teal">Install on your server.</h2>
+    <div class="term">
+      <div class="term-dots"><span></span><span></span><span></span></div>
+      <button class="copy-btn" onclick="copy(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash')" style="border-color:var(--teal)">copy</button>
+      <code><span class="prompt" style="color:var(--teal-l)">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash
+
+<span style="color:var(--green)">  ✓ zipp-nest v0.5.15 installed</span>
+<span class="dim">  run: zipp-nest</span></code>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ── footer ── -->
+<footer>
+  <div>
+    <span style="color:var(--lavender);font-weight:700">zipp</span>
+    <span style="color:var(--dim)"> · made by </span>
+    <a href="https://github.com/Inspiractus01">Michal Mucha</a>
+  </div>
+  <div style="display:flex;gap:20px">
+    <a href="https://github.com/Inspiractus01/zipp">zipp on GitHub</a>
+    <a href="https://github.com/Inspiractus01/zipp-nest">zipp-nest on GitHub</a>
+  </div>
+</footer>
+
+<script>
+  function copy(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'copied!';
+      btn.style.color = 'var(--green)';
+      btn.style.borderColor = 'var(--green)';
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      }, 1800);
+    });
+  }
+</script>
+
+</body>
+</html>
