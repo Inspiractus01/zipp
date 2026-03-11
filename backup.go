@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 	}
 	deleted, err := pruneSnapshots(baseDir, job.MaxSnapshots)
 	if err != nil {
-		output <- fmt.Sprintf("  warning: pruning snapshots failed: %v", err)
+		output <- fmt.Sprintf("  warning: pruning failed: %v", err)
 	} else if deleted > 0 {
 		output <- fmt.Sprintf("  ✓ pruned %d old snapshot(s)", deleted)
 	}
@@ -75,52 +76,26 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 	return nil
 }
 
-// findZstd returns the full path to the zstd binary, or "" if not found.
-// Checks common locations because PATH inside a GUI app can differ from the shell.
-func findZstd() string {
-	candidates := []string{
-		"zstd",
-		"/opt/homebrew/bin/zstd",
-		"/usr/local/bin/zstd",
-		"/usr/bin/zstd",
-		"/opt/local/bin/zstd",
-	}
-	for _, c := range candidates {
-		if p, err := exec.LookPath(c); err == nil {
-			return p
-		}
-	}
-	return ""
-}
-
 func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- string) error {
 	srcDir := strings.TrimSuffix(src, "/")
-
-	zstd := findZstd()
-	var archivePath string
-	var tarArgs []string
-	if zstd != "" {
-		archivePath = filepath.Join(baseDir, snapshot+".tar.zst")
-		tarArgs = []string{"-I", zstd, "-cf", archivePath, "-C", srcDir, "."}
-		output <- "  compressing with zstd..."
-	} else {
-		archivePath = filepath.Join(baseDir, snapshot+".tar.gz")
-		tarArgs = []string{"-czf", archivePath, "-C", srcDir, "."}
-		output <- "  compressing with gzip (install zstd for better speed)..."
-	}
+	archivePath := filepath.Join(baseDir, snapshot+".tar.gz")
 
 	output <- fmt.Sprintf("→ %s", job.Name)
 	output <- fmt.Sprintf("  from  %s/", srcDir)
 	output <- fmt.Sprintf("  to    %s", archivePath)
+	output <- "  compressing files..."
 
-	cmd := exec.Command("tar", tarArgs...)
+	cmd := exec.Command("tar", "-czf", archivePath, "-C", srcDir, ".")
+	// on macOS, disable copying of extended attributes (avoids xattr permission errors)
+	if runtime.GOOS == "darwin" {
+		cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("tar failed: %w\n%s", err, string(out))
+		return fmt.Errorf("compression failed: %w\n%s", err, string(out))
 	}
 
-	stat, err := os.Stat(archivePath)
-	if err == nil {
+	if stat, err := os.Stat(archivePath); err == nil {
 		output <- fmt.Sprintf("  archive size: %s", formatBytes(stat.Size()))
 	}
 

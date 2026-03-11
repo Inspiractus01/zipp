@@ -42,19 +42,6 @@ func checkScheduler() schedulerStatus {
 	return schedulerStatus{active: false, method: "none"}
 }
 
-func zstdInstallHint() []string {
-	if findZstd() != "" {
-		return []string{styleSuccess.Render("✓ zstd installed (used for compression)")}
-	}
-	var hint []string
-	hint = append(hint, styleWarning.Render("⚠ zstd not installed — needed for compression"))
-	if runtime.GOOS == "darwin" {
-		hint = append(hint, styleDim.Render("  install: brew install zstd"))
-	} else {
-		hint = append(hint, styleDim.Render("  install: sudo apt install zstd"))
-	}
-	return hint
-}
 
 func setupScheduler() ([]string, error) {
 	var lines []string
@@ -84,8 +71,6 @@ func setupScheduler() ([]string, error) {
 		if err := installLaunchd(self); err == nil {
 			lines = append(lines, styleSuccess.Render("✓ launchd agent installed (runs every hour)"))
 			lines = append(lines, styleDim.Render("  launchctl list | grep zipp"))
-			lines = append(lines, "")
-			lines = append(lines, zstdInstallHint()...)
 			return lines, nil
 		} else {
 			lines = append(lines, styleWarning.Render("! launchd failed: "+err.Error()))
@@ -102,8 +87,6 @@ func setupScheduler() ([]string, error) {
 	}
 	lines = append(lines, styleSuccess.Render("✓ cron job installed (runs every hour)"))
 	lines = append(lines, styleDim.Render("  crontab -l to verify"))
-	lines = append(lines, "")
-	lines = append(lines, zstdInstallHint()...)
 	return lines, nil
 }
 
@@ -288,13 +271,6 @@ UNIT
 sudo systemctl daemon-reload
 sudo systemctl enable --now zipp.timer
 echo "✓ systemd timer installed (runs every hour)"
-echo ""
-if command -v zstd &> /dev/null; then
-  echo "✓ zstd installed (used for compression)"
-else
-  echo "⚠ zstd not installed — needed for compression"
-  echo "  install: sudo apt install zstd"
-fi
 `, self)
 
 	cmd := exec.Command("bash", "-c", script)

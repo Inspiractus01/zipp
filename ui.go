@@ -663,11 +663,6 @@ func (m model) viewAdd() string {
 		b.WriteString("  " + lStyle.Render(label+":") + "  " + val + "\n")
 		if i == m.formStep && i == 5 {
 			b.WriteString("  " + styleDim.Render("                 saves space but takes longer to backup") + "\n")
-			if findZstd() != "" {
-				b.WriteString("  " + styleSuccess.Render("                 ✓ zstd available") + "\n")
-			} else {
-				b.WriteString("  " + styleWarning.Render("                 ⚠ zstd not found — run Setup to see install instructions") + "\n")
-			}
 		}
 	}
 
