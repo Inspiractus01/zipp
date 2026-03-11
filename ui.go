@@ -59,6 +59,18 @@ func nestHealthCmd(address string) tea.Cmd {
 	}
 }
 
+func nestHealthCmdDelayed(address string) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(30 * time.Second)
+		resp, err := http.Get("http://" + address + "/health")
+		if err != nil {
+			return nestHealthMsg{ok: false}
+		}
+		resp.Body.Close()
+		return nestHealthMsg{ok: resp.StatusCode == 200}
+	}
+}
+
 type updateCheckMsg updateResult
 
 type model struct {
@@ -214,6 +226,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nestHealthMsg:
 		m.nestChecking = false
 		m.nestConnected = msg.ok
+		if m.config.Nest != nil {
+			return m, nestHealthCmdDelayed(m.config.Nest.Address)
+		}
 		return m, nil
 
 	case nestTSCheckMsg:
@@ -980,17 +995,18 @@ func (m model) nestMenuItems() []string {
 		items = append(items, "Setup Tailscale")
 	} else if !m.nestTSStatus.loggedIn {
 		items = append(items, "Login to Tailscale")
-	} else if !m.nestTSStatus.running {
-		items = append(items, "Connect Tailscale")
-		items = append(items, "Logout from Tailscale")
 	} else {
-		if m.config.Nest != nil {
-			items = append(items, "Change address")
-		} else {
-			items = append(items, "Enter address")
-		}
-		items = append(items, "Disconnect Tailscale")
 		items = append(items, "Logout from Tailscale")
+		if m.nestTSStatus.running {
+			items = append(items, "Disable Tailscale")
+			if m.config.Nest != nil {
+				items = append(items, "Change server code")
+			} else {
+				items = append(items, "Enter server code")
+			}
+		} else {
+			items = append(items, "Enable Tailscale")
+		}
 	}
 	items = append(items, "Back")
 	return items
@@ -1017,18 +1033,18 @@ func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, installTailscaleCmd()
 		case "Login to Tailscale":
 			return m, tailscaleLoginCmd()
-		case "Connect Tailscale":
+		case "Enable Tailscale":
 			return m, tailscaleUpCmd()
-		case "Disconnect Tailscale":
+		case "Disable Tailscale":
 			m.nestConnected = false
 			return m, tailscaleDownCmd()
 		case "Logout from Tailscale":
 			m.nestConnected = false
 			return m, tailscaleLogoutCmd()
-		case "Enter address", "Change address":
+		case "Enter server code", "Change server code":
 			ti := textinput.New()
-			ti.Placeholder = "short code (570-0932) or full IP:port"
-			ti.Width = 52
+			ti.Placeholder = "short code (e.g. 16834-22532)"
+			ti.Width = 40
 			if m.config.Nest != nil {
 				ti.SetValue(m.config.Nest.Address)
 			}
@@ -1140,7 +1156,6 @@ func (m model) viewNestInput() string {
 	b.WriteString("\n")
 	b.WriteString(styleDim.Render("  enter the short code from zipp-nest Connection info:\n\n"))
 	b.WriteString("  " + m.nestInput.View() + "\n")
-	b.WriteString(styleDim.Render("  (short code like 570-0932, or full IP:port)") + "\n")
 
 	if m.nestErr != "" {
 		b.WriteString("\n  " + styleError.Render("✗ "+m.nestErr) + "\n")
