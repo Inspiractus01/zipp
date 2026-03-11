@@ -4,20 +4,11 @@ Simple backup manager with scheduling and snapshots. Add your backup jobs, set a
 
 ## Install
 
-**Linux (amd64):**
 ```bash
-curl -sL https://github.com/Inspiractus01/zipp/releases/latest/download/zipp-linux-amd64 -o /usr/local/bin/zipp && chmod +x /usr/local/bin/zipp
+curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash
 ```
 
-**Linux (arm64 / Raspberry Pi):**
-```bash
-curl -sL https://github.com/Inspiractus01/zipp/releases/latest/download/zipp-linux-arm64 -o /usr/local/bin/zipp && chmod +x /usr/local/bin/zipp
-```
-
-**macOS (Apple Silicon):**
-```bash
-curl -sL https://github.com/Inspiractus01/zipp/releases/latest/download/zipp-darwin-arm64 -o /usr/local/bin/zipp && chmod +x /usr/local/bin/zipp
-```
+Auto-detects your OS and architecture (Linux/macOS, amd64/arm64).
 
 ## Usage
 
