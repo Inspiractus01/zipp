@@ -1,12 +1,10 @@
 # Zipp
 
 ```
-    \    /\    /
-     \  /  \  /
-     (●      ●)
-      \______/
-        ||||
-       /||||\
+  )()(
+ ( ●● )
+  \──/
+  /||\
 ```
 
 Simple backup manager with scheduling and snapshots. Add your backup jobs, set an interval, forget about it.

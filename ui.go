@@ -577,8 +577,9 @@ func (m model) viewMenu() string {
 	}
 
 	if m.updateInfo.hasUpdate {
-		b.WriteString("  " + styleUpdate.Render("↑ update available: v"+m.updateInfo.latest) + "\n")
-		b.WriteString("  " + styleDim.Render("  curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash") + "\n")
+		alert := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+		b.WriteString("  " + alert.Render("● new version available: v"+m.updateInfo.latest) + "\n")
+		b.WriteString("  " + styleDim.Render("  select \"Run update\" to install") + "\n")
 	}
 
 	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · q quit"))
