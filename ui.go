@@ -1004,6 +1004,11 @@ func (m model) nestMenuItems() []string {
 		}
 		if m.config.Nest != nil {
 			items = append(items, "Change server code")
+			if m.config.Nest.Disabled {
+				items = append(items, "Enable uploads")
+			} else {
+				items = append(items, "Disable uploads")
+			}
 		} else {
 			items = append(items, "Enter server code")
 		}
@@ -1041,6 +1046,16 @@ func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "Logout from Tailscale":
 			m.nestConnected = false
 			return m, tailscaleLogoutCmd()
+		case "Enable uploads":
+			if m.config.Nest != nil {
+				m.config.Nest.Disabled = false
+				m.config.save()
+			}
+		case "Disable uploads":
+			if m.config.Nest != nil {
+				m.config.Nest.Disabled = true
+				m.config.save()
+			}
 		case "Enter server code", "Change server code":
 			ti := textinput.New()
 			ti.Placeholder = "short code (e.g. 16834-22532)"

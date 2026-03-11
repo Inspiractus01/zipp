@@ -32,8 +32,11 @@ func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 	if err != nil {
 		return err
 	}
-	if job.NestEnabled && nest != nil {
+	if job.NestEnabled && nest != nil && !nest.Disabled {
 		uploadToNest(job, src, snapshot, nest, output)
+		if job.MaxSnapshots > 0 {
+			pruneNestSnapshots(job.Name, nest.Address, job.MaxSnapshots, output)
+		}
 	}
 	return nil
 }
@@ -261,6 +264,22 @@ func uploadToNest(job *Job, src, snapshot string, nest *NestConfig, output chan<
 		return
 	}
 	output <- fmt.Sprintf("  ✓ uploaded to nest (%s)", formatBytes(int64(len(data))))
+}
+
+func pruneNestSnapshots(jobName, address string, keep int, output chan<- string) {
+	url := fmt.Sprintf("http://%s/backups/%s?keep=%d", address, jobName, keep)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		output <- fmt.Sprintf("  ✓ nest snapshots pruned (keeping %d)", keep)
+	}
 }
 
 func expandPath(p string) string {

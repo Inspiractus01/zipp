@@ -22,7 +22,8 @@ type Job struct {
 }
 
 type NestConfig struct {
-	Address string `json:"address"` // tailscale-ip:port
+	Address  string `json:"address"`
+	Disabled bool   `json:"disabled,omitempty"` // when true, skip uploads
 }
 
 type Config struct {
