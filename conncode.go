@@ -8,27 +8,29 @@ import (
 
 const defaultNestPort = 9090
 
-// decodeNestCode decodes a short XXX-XXXX code back to "IP:port".
-// Example: "570-0932" → "100.86.253.68:9090"
-// If input already looks like an IP:port address, it is returned as-is.
+// decodeNestCode decodes a 10-digit code (XXXXX-XXXXX) back to "IP:port".
+// If input already contains a dot it is treated as a full IP:port address.
+// Example: "16834-22532" → "100.86.253.68:9090"
+//          "32322-35781" → "192.168.1.5:9090"
 func decodeNestCode(code string) (string, error) {
 	code = strings.TrimSpace(code)
 
-	// if it contains a dot it's already a full address — pass through
+	// full address passed directly
 	if strings.Contains(code, ".") {
 		return code, nil
 	}
 
 	clean := strings.ReplaceAll(code, "-", "")
-	if len(clean) != 7 {
-		return "", fmt.Errorf("expected a 7-digit code like 570-0932")
+	if len(clean) != 10 {
+		return "", fmt.Errorf("expected a 10-digit code like 16834-22532")
 	}
-	val, err := strconv.Atoi(clean)
+	val, err := strconv.ParseUint(clean, 10, 32)
 	if err != nil {
 		return "", fmt.Errorf("invalid code")
 	}
-	o2 := val >> 16
+	o1 := (val >> 24) & 0xFF
+	o2 := (val >> 16) & 0xFF
 	o3 := (val >> 8) & 0xFF
 	o4 := val & 0xFF
-	return fmt.Sprintf("100.%d.%d.%d:%d", o2, o3, o4, defaultNestPort), nil
+	return fmt.Sprintf("%d.%d.%d.%d:%d", o1, o2, o3, o4, defaultNestPort), nil
 }
