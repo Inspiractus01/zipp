@@ -75,16 +75,35 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 	return nil
 }
 
+// zstdAvailable returns true if the zstd binary is on PATH.
+func zstdAvailable() bool {
+	_, err := exec.LookPath("zstd")
+	return err == nil
+}
+
 func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- string) error {
-	archivePath := filepath.Join(baseDir, snapshot+".tar.gz")
 	srcDir := strings.TrimSuffix(src, "/")
+
+	// prefer zstd (faster, better ratio, opens on Windows via 7-Zip)
+	// fall back to gzip if zstd not installed
+	useZstd := zstdAvailable()
+	var archivePath string
+	var tarArgs []string
+	if useZstd {
+		archivePath = filepath.Join(baseDir, snapshot+".tar.zst")
+		tarArgs = []string{"-I", "zstd", "-cf", archivePath, "-C", srcDir, "."}
+		output <- "  compressing with zstd... (fast + good ratio)"
+	} else {
+		archivePath = filepath.Join(baseDir, snapshot+".tar.gz")
+		tarArgs = []string{"-czf", archivePath, "-C", srcDir, "."}
+		output <- "  compressing with gzip... (install zstd for better speed)"
+	}
 
 	output <- fmt.Sprintf("→ %s", job.Name)
 	output <- fmt.Sprintf("  from  %s/", srcDir)
 	output <- fmt.Sprintf("  to    %s", archivePath)
-	output <- "  compressing files... (this may take a while)"
 
-	cmd := exec.Command("tar", "-czf", archivePath, "-C", srcDir, ".")
+	cmd := exec.Command("tar", tarArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tar failed: %w\n%s", err, string(out))
@@ -121,8 +140,9 @@ func pruneSnapshots(dest string, max int) (int, error) {
 	}
 	var snapshots []string
 	for _, e := range entries {
-		if e.IsDir() || strings.HasSuffix(e.Name(), ".tar.gz") {
-			snapshots = append(snapshots, e.Name())
+		name := e.Name()
+		if e.IsDir() || strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.zst") {
+			snapshots = append(snapshots, name)
 		}
 	}
 	sort.Strings(snapshots)
