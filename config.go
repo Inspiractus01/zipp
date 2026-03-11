@@ -17,6 +17,7 @@ type Job struct {
 	MaxSnapshots  int       `json:"maxSnapshots"`
 	LastRun       time.Time `json:"lastRun"`
 	Enabled       bool      `json:"enabled"`
+	Compress      bool      `json:"compress"`
 }
 
 type Config struct {

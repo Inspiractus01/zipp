@@ -364,6 +364,7 @@ func newFormInputs() []textinput.Model {
 		{"e.g. /mnt/backup/docs", 256},
 		{"hours between backups, 0 = manual", 4},
 		{"number of snapshots to keep", 4},
+		{"y = compress (.tar.gz, saves space, slower)  n = folders (default)", 1},
 	}
 
 	inputs := make([]textinput.Model, len(fields))
@@ -386,10 +387,15 @@ func newFormInputsFrom(j *Job) []textinput.Model {
 	inputs[2].SetValue(j.Destination)
 	inputs[3].SetValue(fmt.Sprintf("%d", j.IntervalHours))
 	inputs[4].SetValue(fmt.Sprintf("%d", j.MaxSnapshots))
+	if j.Compress {
+		inputs[5].SetValue("y")
+	} else {
+		inputs[5].SetValue("n")
+	}
 	return inputs
 }
 
-var formLabels = []string{"Name", "Source", "Destination", "Interval (h)", "Max snapshots"}
+var formLabels = []string{"Name", "Source", "Destination", "Interval (h)", "Max snapshots", "Compress"}
 
 func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -442,6 +448,8 @@ func (m model) buildJob() *Job {
 		fmt.Sscanf(m.formInputs[4].Value(), "%d", &maxSnap)
 	}
 
+	compress := strings.ToLower(strings.TrimSpace(m.formInputs[5].Value())) == "y"
+
 	return &Job{
 		ID:            fmt.Sprintf("%x", time.Now().UnixNano()),
 		Name:          name,
@@ -449,6 +457,7 @@ func (m model) buildJob() *Job {
 		Destination:   dest,
 		IntervalHours: interval,
 		MaxSnapshots:  maxSnap,
+		Compress:      compress,
 		Enabled:       true,
 	}
 }
@@ -471,6 +480,7 @@ func (m model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.editTarget.Destination = strings.TrimSpace(m.formInputs[2].Value())
 			fmt.Sscanf(m.formInputs[3].Value(), "%d", &m.editTarget.IntervalHours)
 			fmt.Sscanf(m.formInputs[4].Value(), "%d", &m.editTarget.MaxSnapshots)
+			m.editTarget.Compress = strings.ToLower(strings.TrimSpace(m.formInputs[5].Value())) == "y"
 			m.config.save()
 		}
 		m.editTarget = nil
@@ -606,11 +616,14 @@ func (m model) viewJobs() string {
 				indicator = styleSuccess.Render("✓")
 			}
 
-			name := job.Name
+			nameStr := job.Name
 			if selected {
-				name = styleSelected.Render(name)
+				nameStr = styleSelected.Render(nameStr)
 			} else {
-				name = styleNormal.Render(name)
+				nameStr = styleNormal.Render(nameStr)
+			}
+			if job.Compress {
+				nameStr += styleDim.Render(" [zip]")
 			}
 
 			next := styleDim.Render(job.nextRun())
@@ -620,7 +633,7 @@ func (m model) viewJobs() string {
 				prefix = styleSelected.Render("▸ ")
 			}
 
-			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+name, next)
+			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+nameStr, next)
 			b.WriteString(lipgloss.NewStyle().Width(60).Render(line) + "\n")
 		}
 	}
@@ -648,6 +661,9 @@ func (m model) viewAdd() string {
 		}
 
 		b.WriteString("  " + lStyle.Render(label+":") + "  " + val + "\n")
+		if i == m.formStep && i == 5 {
+			b.WriteString("  " + styleDim.Render("                 saves space but takes longer to backup") + "\n")
+		}
 	}
 
 	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
