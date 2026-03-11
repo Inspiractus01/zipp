@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -114,6 +115,54 @@ func writeFileRoot(path, content string) error {
 	cmd := exec.Command("sudo", "tee", path)
 	cmd.Stdin = strings.NewReader(content)
 	return cmd.Run()
+}
+
+func uninstall() {
+	fmt.Println("uninstalling Zipp...")
+
+	// systemd
+	if runtime.GOOS == "linux" {
+		exec.Command("sudo", "systemctl", "disable", "--now", "zipp.timer").Run()
+		exec.Command("sudo", "rm", "-f",
+			"/etc/systemd/system/zipp.service",
+			"/etc/systemd/system/zipp.timer",
+		).Run()
+		exec.Command("sudo", "systemctl", "daemon-reload").Run()
+		fmt.Println("✓ removed systemd timer")
+	}
+
+	// cron
+	existing, err := exec.Command("crontab", "-l").Output()
+	if err == nil {
+		cleaned := ""
+		for _, line := range strings.Split(string(existing), "\n") {
+			if !strings.Contains(line, "zipp run") {
+				cleaned += line + "\n"
+			}
+		}
+		cmd := exec.Command("crontab", "-")
+		cmd.Stdin = strings.NewReader(cleaned)
+		if cmd.Run() == nil {
+			fmt.Println("✓ removed cron job")
+		}
+	}
+
+	// binary
+	exec.Command("sudo", "rm", "-f", "/usr/local/bin/zipp").Run()
+	fmt.Println("✓ removed binary")
+
+	// config — ask
+	home, _ := os.UserHomeDir()
+	cfgDir := home + "/.zipp"
+	fmt.Print("remove config and jobs (~/.zipp)? [y/N] ")
+	var answer string
+	fmt.Scanln(&answer)
+	if strings.ToLower(answer) == "y" {
+		os.RemoveAll(cfgDir)
+		fmt.Println("✓ removed ~/.zipp")
+	}
+
+	fmt.Println("\nzipp uninstalled. bye 🪰")
 }
 
 // tea.Cmd

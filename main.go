@@ -101,6 +101,9 @@ func runCLI(args []string) {
 			fmt.Printf("%s  %-24s  %s\n", status, j.Name, j.nextRun())
 		}
 
+	case "uninstall", "--uninstall":
+		uninstall()
+
 	case "version", "-v", "--version":
 		fmt.Printf("zipp v%s\n", version)
 
@@ -113,6 +116,7 @@ Usage:
   zipp run-all      run all enabled jobs
   zipp list         list all jobs
   zipp version      show version
+  zipp uninstall    remove zipp from this system
 
 `)
 
