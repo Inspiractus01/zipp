@@ -60,16 +60,13 @@ var (
 			Foreground(colorGray)
 )
 
-var flyWingFrames = []string{
-	`._q0p_.`, // wings normal
-	`._/0\_.`, // wings up
-	`.~~0~~.`, // buzzing
-	`._\0/_.`, // wings down
-}
+// wing chars only — head (0) stays static between them
+var flyWingLeft  = []string{"q", "/", "~", `\`}
+var flyWingRight = []string{"p", `\`, "~", "/"}
 
 var flySosakFrames = []string{
-	"  `·´", // extended  — · aligned with head center
-	"   · ", // retracted — · aligned with head center
+	"  `·´", // extended
+	"   · ", // retracted
 	"  `·´", // extended
 	"   · ", // retracted
 }
@@ -77,9 +74,14 @@ var flySosakFrames = []string{
 var styleSosak = lipgloss.NewStyle().Foreground(colorRed)
 
 func renderFlyLines(frame int) string {
-	idx := frame % len(flyWingFrames)
+	idx := frame % 4
+	wings := styleLogo.Render("._") +
+		styleLogo.Render(flyWingLeft[idx]) +
+		styleLogoAccent.Render("0") +
+		styleLogo.Render(flyWingRight[idx]) +
+		styleLogo.Render("_.")
 	return styleSosak.Render(flySosakFrames[idx]) + "\n" +
-		styleLogo.Render(flyWingFrames[idx]) + "\n" +
+		wings + "\n" +
 		styleLogo.Render(`'=(`) + styleLogoAccent.Render(`_`) + styleLogo.Render(`)='`) + "\n" +
 		styleLogo.Render(` / `) + styleLogoAccent.Render(`V`) + styleLogo.Render(` \`) + "\n" +
 		styleLogo.Render(`(_/`) + styleLogoAccent.Render(`^`) + styleLogo.Render(`\_)`)
