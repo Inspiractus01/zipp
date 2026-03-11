@@ -60,20 +60,20 @@ var (
 			Foreground(colorGray)
 )
 
-// flyWingFrames are the top wing-line variants for the animated header.
-// Each frame only changes the wing shape; the rest of the fly stays the same.
+// flyWingFrames — top wing line only, rest of fly stays the same.
+// All frames are the same width so layout doesn't shift during animation.
 var flyWingFrames = []string{
-	` \  /\  /`,  // wings spread (normal)
-	`  /\/\/\ `,  // wings up
-	`  ~~~~~~ `,  // buzzing
-	` \/    \/ `, // wings down
+	`  )()(`, // wings spread (normal)
+	`  /\/\`, // wings up
+	`  ~~~~`, // buzzing
+	`  \/\/`, // wings down
 }
 
 func renderFlyLines(wingLine string) string {
 	return styleLogo.Render(wingLine) + "\n" +
-		styleLogo.Render(` (`) + styleLogoAccent.Render(`●`) + styleLogo.Render(`  `) + styleLogoAccent.Render(`●`) + styleLogo.Render(`) `) + "\n" +
-		styleLogo.Render(` \______/ `) + "\n" +
-		styleLogo.Render(`   /||\   `)
+		styleLogo.Render(" ( ") + styleLogoAccent.Render("●●") + styleLogo.Render(" )") + "\n" +
+		styleLogo.Render(`  \──/`) + "\n" +
+		styleLogo.Render(`  /||\`)
 }
 
 func renderHeader(subtitle string) string {
