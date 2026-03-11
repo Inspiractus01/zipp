@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -48,13 +49,21 @@ func installTailscaleCmd() tea.Cmd {
 }
 
 func tailscaleUpCmd() tea.Cmd {
-	return tea.ExecProcess(exec.Command("tailscale", "up"), func(err error) tea.Msg {
-		return nestTSDoneMsg{err: err}
-	})
+	return func() tea.Msg {
+		out, err := exec.Command("tailscale", "up").CombinedOutput()
+		if err != nil {
+			return nestTSDoneMsg{err: fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)}
+		}
+		return nestTSDoneMsg{}
+	}
 }
 
 func tailscaleDownCmd() tea.Cmd {
-	return tea.ExecProcess(exec.Command("tailscale", "down"), func(err error) tea.Msg {
-		return nestTSDoneMsg{err: err}
-	})
+	return func() tea.Msg {
+		out, err := exec.Command("tailscale", "down").CombinedOutput()
+		if err != nil {
+			return nestTSDoneMsg{err: fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)}
+		}
+		return nestTSDoneMsg{}
+	}
 }
