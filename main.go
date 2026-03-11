@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const version = "1.0.0"
+var version = "dev" // set at build time via -ldflags
 
 func main() {
 	if len(os.Args) > 1 {

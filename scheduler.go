@@ -16,7 +16,7 @@ type schedulerStatus struct {
 }
 
 func checkScheduler() schedulerStatus {
-	// check systemd first
+	// systemd (linux)
 	if runtime.GOOS == "linux" {
 		out, err := exec.Command("systemctl", "is-active", "zipp.timer").Output()
 		if err == nil && strings.TrimSpace(string(out)) == "active" {
@@ -24,7 +24,16 @@ func checkScheduler() schedulerStatus {
 		}
 	}
 
-	// check cron
+	// launchd (macOS)
+	if runtime.GOOS == "darwin" {
+		home, _ := os.UserHomeDir()
+		plist := home + "/Library/LaunchAgents/com.zipp.runner.plist"
+		if _, err := os.Stat(plist); err == nil {
+			return schedulerStatus{active: true, method: "launchd"}
+		}
+	}
+
+	// cron fallback
 	out, err := exec.Command("crontab", "-l").Output()
 	if err == nil && strings.Contains(string(out), "zipp run") {
 		return schedulerStatus{active: true, method: "cron"}
@@ -40,23 +49,38 @@ func setupScheduler() ([]string, error) {
 		self = "zipp"
 	}
 
-	// try systemd on linux
+	// linux — systemd
 	if runtime.GOOS == "linux" {
 		if _, err := exec.LookPath("systemctl"); err == nil {
-			lines = append(lines, "detected: Linux with systemd")
-			err := installSystemd(self)
-			if err == nil {
+			lines = append(lines, "detected: Linux + systemd")
+			if err := installSystemd(self); err == nil {
 				lines = append(lines, styleSuccess.Render("✓ systemd timer installed (runs every hour)"))
 				lines = append(lines, styleDim.Render("  systemctl status zipp.timer"))
 				return lines, nil
+			} else {
+				lines = append(lines, styleWarning.Render("! systemd failed: "+err.Error()))
+				lines = append(lines, styleDim.Render("  falling back to cron..."))
 			}
-			lines = append(lines, styleWarning.Render("! systemd failed: "+err.Error()))
+		}
+	}
+
+	// macOS — launchd (no FDA needed, works out of the box)
+	if runtime.GOOS == "darwin" {
+		lines = append(lines, "detected: macOS")
+		if err := installLaunchd(self); err == nil {
+			lines = append(lines, styleSuccess.Render("✓ launchd agent installed (runs every hour)"))
+			lines = append(lines, styleDim.Render("  launchctl list | grep zipp"))
+			return lines, nil
+		} else {
+			lines = append(lines, styleWarning.Render("! launchd failed: "+err.Error()))
 			lines = append(lines, styleDim.Render("  falling back to cron..."))
 		}
 	}
 
 	// fallback: cron
-	lines = append(lines, "detected: "+runtime.GOOS)
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		lines = append(lines, "detected: "+runtime.GOOS)
+	}
 	if err := installCron(self); err != nil {
 		return lines, err
 	}
@@ -96,6 +120,42 @@ WantedBy=timers.target
 	return exec.Command("sudo", "systemctl", "enable", "--now", "zipp.timer").Run()
 }
 
+func installLaunchd(bin string) error {
+	home, _ := os.UserHomeDir()
+	agentsDir := home + "/Library/LaunchAgents"
+	plist := agentsDir + "/com.zipp.runner.plist"
+
+	if err := os.MkdirAll(agentsDir, 0755); err != nil {
+		return err
+	}
+
+	content := `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.zipp.runner</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>` + bin + `</string>
+		<string>run</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>
+`
+	if err := os.WriteFile(plist, []byte(content), 0644); err != nil {
+		return err
+	}
+
+	// load it (unload first in case it exists)
+	exec.Command("launchctl", "unload", plist).Run()
+	return exec.Command("launchctl", "load", plist).Run()
+}
+
 func installCron(bin string) error {
 	entry := "0 * * * * " + bin + " run\n"
 
@@ -114,6 +174,7 @@ func installCron(bin string) error {
 func writeFileRoot(path, content string) error {
 	cmd := exec.Command("sudo", "tee", path)
 	cmd.Stdin = strings.NewReader(content)
+	cmd.Stdout = nil // suppress tee output
 	return cmd.Run()
 }
 

@@ -22,6 +22,7 @@ jobs:
 
       - name: Build binaries
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           TARGETS=(
             "linux/amd64"
             "linux/arm64"
@@ -33,8 +34,10 @@ jobs:
             OS="${target%/*}"
             ARCH="${target#*/}"
             OUT="dist/zipp-${OS}-${ARCH}"
-            echo "building $OUT"
-            GOOS=$OS GOARCH=$ARCH go build -ldflags="-s -w" -o "$OUT" .
+            echo "building $OUT (v${VERSION})"
+            GOOS=$OS GOARCH=$ARCH go build \
+              -ldflags="-s -w -X main.version=${VERSION}" \
+              -o "$OUT" .
           done
           ls -lh dist/
 

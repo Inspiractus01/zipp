@@ -52,7 +52,21 @@ type model struct {
 	editTarget *Job
 }
 
-var menuItems = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
+var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
+
+func (m model) getMenuItems() []string {
+	if m.updateInfo.hasUpdate {
+		items := make([]string, 0, len(menuItemsBase)+1)
+		for _, item := range menuItemsBase {
+			if item == "Quit" {
+				items = append(items, "Run update")
+			}
+			items = append(items, item)
+		}
+		return items
+	}
+	return menuItemsBase
+}
 
 func newModel(cfg *Config) model {
 	return model{
@@ -133,17 +147,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // — Menu —
 
 func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	items := m.getMenuItems()
 	switch msg.String() {
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
 		}
 	case "down", "j":
-		if m.cursor < len(menuItems)-1 {
+		if m.cursor < len(items)-1 {
 			m.cursor++
 		}
 	case "enter":
-		switch menuItems[m.cursor] {
+		switch items[m.cursor] {
 		case "Jobs":
 			m.page = pageJobs
 			m.cursor = 0
@@ -162,6 +177,11 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runOutput = nil
 			m.runDone = false
 			return m, setupSchedulerCmd()
+		case "Run update":
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			return m, runUpdateCmd()
 		case "Quit":
 			return m, tea.Quit
 		}
@@ -412,9 +432,11 @@ func (m model) viewMenu() string {
 	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
-	for i, item := range menuItems {
+	for i, item := range m.getMenuItems() {
 		if i == m.cursor {
 			b.WriteString("  " + styleSelected.Render("▸ "+item))
+		} else if item == "Run update" {
+			b.WriteString("  " + styleUpdate.Render("  "+item))
 		} else {
 			b.WriteString("  " + styleDim.Render("  "+item))
 		}
