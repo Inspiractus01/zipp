@@ -96,10 +96,13 @@ type model struct {
 	restoreCursor int
 
 	// nest
-	nestInput     textinput.Model
-	nestErr       string
-	nestConnected bool
-	nestChecking  bool
+	nestInput      textinput.Model
+	nestErr        string
+	nestConnected  bool
+	nestChecking   bool
+	nestTSStatus   tailscaleStatus
+	nestPageCursor int
+	nestInputMode  bool
 }
 
 var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Nest", "Quit"}
@@ -199,6 +202,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nestChecking = false
 		m.nestConnected = msg.ok
 		return m, nil
+
+	case nestTSCheckMsg:
+		m.nestTSStatus = tailscaleStatus(msg)
+		return m, nil
+
+	case nestTSDoneMsg:
+		m.nestErr = ""
+		if msg.err != nil {
+			m.nestErr = msg.err.Error()
+		}
+		return m, checkNestTSCmd()
 
 	case schedulerCheckMsg:
 		m.schedulerInfo = schedulerStatus(msg)
@@ -353,18 +367,12 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runDone = false
 			return m, runUpdateCmd()
 		case "Nest":
-			ti := textinput.New()
-			ti.Placeholder = "short code (570-0932) or full IP:port"
-			ti.Width = 52
-			if m.config.Nest != nil {
-				ti.SetValue(m.config.Nest.Address)
-			}
-			ti.Focus()
-			m.nestInput = ti
 			m.nestErr = ""
-			m.nestChecking = false
+			m.nestInputMode = false
+			m.nestPageCursor = 0
 			m.page = pageNest
 			var cmds []tea.Cmd
+			cmds = append(cmds, checkNestTSCmd())
 			if m.config.Nest != nil {
 				m.nestChecking = true
 				cmds = append(cmds, nestHealthCmd(m.config.Nest.Address))
@@ -946,10 +954,78 @@ func (m model) viewRestore() string {
 }
 
 func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.nestInputMode {
+		return m.updateNestInput(msg)
+	}
+	return m.updateNestMenu(msg)
+}
+
+func (m model) nestMenuItems() []string {
+	var items []string
+	if !m.nestTSStatus.installed {
+		items = append(items, "Setup Tailscale")
+	} else if !m.nestTSStatus.running {
+		items = append(items, "Connect Tailscale")
+	} else {
+		if m.config.Nest != nil {
+			items = append(items, "Change address")
+		} else {
+			items = append(items, "Enter address")
+		}
+		items = append(items, "Disconnect Tailscale")
+	}
+	items = append(items, "Back")
+	return items
+}
+
+func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	items := m.nestMenuItems()
 	switch msg.String() {
 	case "esc":
 		m.page = pageMenu
 		m.nestErr = ""
+		return m, nil
+	case "up", "k":
+		if m.nestPageCursor > 0 {
+			m.nestPageCursor--
+		}
+	case "down", "j":
+		if m.nestPageCursor < len(items)-1 {
+			m.nestPageCursor++
+		}
+	case "enter":
+		switch items[m.nestPageCursor] {
+		case "Setup Tailscale":
+			return m, installTailscaleCmd()
+		case "Connect Tailscale":
+			return m, tailscaleUpCmd()
+		case "Disconnect Tailscale":
+			m.nestConnected = false
+			return m, tailscaleDownCmd()
+		case "Enter address", "Change address":
+			ti := textinput.New()
+			ti.Placeholder = "short code (570-0932) or full IP:port"
+			ti.Width = 52
+			if m.config.Nest != nil {
+				ti.SetValue(m.config.Nest.Address)
+			}
+			ti.Focus()
+			m.nestInput = ti
+			m.nestInputMode = true
+			return m, textinput.Blink
+		case "Back":
+			m.page = pageMenu
+			m.nestErr = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateNestInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.nestInputMode = false
 		return m, nil
 	case "enter":
 		raw := strings.TrimSpace(m.nestInput.Value())
@@ -957,7 +1033,7 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.config.Nest = nil
 			m.nestConnected = false
 			m.config.save()
-			m.page = pageMenu
+			m.nestInputMode = false
 			return m, nil
 		}
 		address, err := decodeNestCode(raw)
@@ -972,6 +1048,7 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.nestChecking = true
 		m.nestErr = ""
+		m.nestInputMode = false
 		return m, nestHealthCmd(address)
 	}
 	var cmd tea.Cmd
@@ -980,23 +1057,63 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) viewNest() string {
+	if m.nestInputMode {
+		return m.viewNestInput()
+	}
+	return m.viewNestMenu()
+}
+
+func (m model) viewNestMenu() string {
 	var b strings.Builder
 	b.WriteString(renderHeader("Nest"))
 	b.WriteString("\n")
 
-	// connection status
-	if m.nestChecking {
-		b.WriteString(styleDim.Render("  checking connection...") + "\n\n")
-	} else if m.nestConnected {
-		b.WriteString(styleSuccess.Render("  ✓ connected to "+m.config.Nest.Address) + "\n\n")
-	} else if m.config.Nest != nil {
-		b.WriteString(styleWarning.Render("  ○ not reachable: "+m.config.Nest.Address) + "\n\n")
+	// tailscale status
+	tsLine := "  Tailscale   "
+	if m.nestTSStatus.installed && m.nestTSStatus.running {
+		tsLine += styleSuccess.Render("● connected  ") + styleDim.Render(m.nestTSStatus.ip)
+	} else if m.nestTSStatus.installed {
+		tsLine += styleWarning.Render("○ not connected")
 	} else {
-		b.WriteString(styleDim.Render("  no nest configured") + "\n\n")
+		tsLine += styleError.Render("○ not installed")
+	}
+	b.WriteString(tsLine + "\n")
+
+	// nest connection status
+	nestLine := "  Nest        "
+	if m.nestChecking {
+		nestLine += styleDim.Render("checking...")
+	} else if m.nestConnected && m.config.Nest != nil {
+		nestLine += styleSuccess.Render("● connected  ") + styleDim.Render(m.config.Nest.Address)
+	} else if m.config.Nest != nil {
+		nestLine += styleWarning.Render("○ " + m.config.Nest.Address)
+	} else {
+		nestLine += styleDim.Render("○ not set up")
+	}
+	b.WriteString(nestLine + "\n\n")
+
+	items := m.nestMenuItems()
+	for i, item := range items {
+		if i == m.nestPageCursor {
+			b.WriteString("  " + styleSelected.Render("▸ "+item) + "\n")
+		} else {
+			b.WriteString("  " + styleDim.Render("  "+item) + "\n")
+		}
 	}
 
-	// address input
-	b.WriteString(styleDim.Render("  zipp-nest address:") + "\n")
+	if m.nestErr != "" {
+		b.WriteString("\n  " + styleError.Render("✗ "+m.nestErr) + "\n")
+	}
+
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · esc back"))
+	return b.String()
+}
+
+func (m model) viewNestInput() string {
+	var b strings.Builder
+	b.WriteString(renderHeader("Nest — address"))
+	b.WriteString("\n")
+	b.WriteString(styleDim.Render("  enter the short code from zipp-nest Connection info:\n\n"))
 	b.WriteString("  " + m.nestInput.View() + "\n")
 	b.WriteString(styleDim.Render("  (short code like 570-0932, or full IP:port)") + "\n")
 
