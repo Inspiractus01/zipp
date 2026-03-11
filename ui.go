@@ -19,6 +19,8 @@ const (
 	pageEdit
 	pageRun
 	pageConfirmDelete
+	pageRestore
+	pageConfirmRestore
 )
 
 // runResultMsg is used by setup/update cmds (non-streaming).
@@ -72,6 +74,11 @@ type model struct {
 
 	// edit
 	editTarget *Job
+
+	// restore
+	restoreJob    *Job
+	restoreSnaps  []string
+	restoreCursor int
 }
 
 var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Quit"}
@@ -128,6 +135,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.page == pageConfirmDelete {
 				m.page = pageJobs
 				m.deleteTarget = nil
+			} else if m.page == pageRestore {
+				m.page = pageJobs
+				m.restoreJob = nil
+				m.restoreSnaps = nil
+				m.restoreCursor = 0
+			} else if m.page == pageConfirmRestore {
+				m.page = pageRestore
 			}
 			return m, nil
 		}
@@ -145,6 +159,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRun(msg)
 		case pageConfirmDelete:
 			return m.updateConfirmDelete(msg)
+		case pageRestore:
+			return m.updateRestore(msg)
+		case pageConfirmRestore:
+			return m.updateConfirmRestore(msg)
 		}
 
 	case updateCheckMsg:
@@ -347,6 +365,19 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			job := m.config.Jobs[m.cursor]
 			job.Enabled = !job.Enabled
 			m.config.save()
+		}
+	case "r":
+		if len(m.config.Jobs) > 0 {
+			job := m.config.Jobs[m.cursor]
+			snaps, err := listSnapshots(job)
+			if err != nil || len(snaps) == 0 {
+				// nothing to restore yet
+				break
+			}
+			m.restoreJob = job
+			m.restoreSnaps = snaps
+			m.restoreCursor = 0
+			m.page = pageRestore
 		}
 	}
 	return m, nil
@@ -554,6 +585,10 @@ func (m model) View() string {
 		return m.viewRun()
 	case pageConfirmDelete:
 		return m.viewConfirmDelete()
+	case pageRestore:
+		return m.viewRestore()
+	case pageConfirmRestore:
+		return m.viewConfirmRestore()
 	}
 	return ""
 }
@@ -638,7 +673,7 @@ func (m model) viewJobs() string {
 		}
 	}
 
-	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · e edit · d delete · t toggle · esc back"))
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · r restore · e edit · d delete · t toggle · esc back"))
 	return b.String()
 }
 
@@ -755,6 +790,95 @@ func (m model) viewEdit() string {
 	}
 
 	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
+	return b.String()
+}
+
+// — Restore —
+
+func (m model) updateRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.restoreCursor > 0 {
+			m.restoreCursor--
+		}
+	case "down", "j":
+		if m.restoreCursor < len(m.restoreSnaps)-1 {
+			m.restoreCursor++
+		}
+	case "enter":
+		if len(m.restoreSnaps) > 0 {
+			m.page = pageConfirmRestore
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
+			snapshot := m.restoreSnaps[m.restoreCursor]
+			job := m.restoreJob
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			m.restoreJob = nil
+			m.restoreSnaps = nil
+			return m, func() tea.Msg {
+				ch := make(chan string, 128)
+				errCh := make(chan error, 1)
+				go func() {
+					defer close(ch)
+					errCh <- runRestore(job, snapshot, ch)
+				}()
+				return runStartedMsg{ch: ch, errCh: errCh}
+			}
+		}
+	case "n", "esc":
+		m.page = pageRestore
+	}
+	return m, nil
+}
+
+func (m model) viewRestore() string {
+	var b strings.Builder
+	name := ""
+	if m.restoreJob != nil {
+		name = m.restoreJob.Name
+	}
+	b.WriteString(renderHeader("Restore — " + name))
+	b.WriteString("\n")
+	b.WriteString(styleDim.Render("  select a snapshot to restore:\n\n"))
+
+	for i, snap := range m.restoreSnaps {
+		label := snap
+		if i == 0 {
+			label += styleDim.Render("  ← newest")
+		}
+		if i == m.restoreCursor {
+			b.WriteString("  " + styleSelected.Render("▸ "+label) + "\n")
+		} else {
+			b.WriteString("  " + styleDim.Render("  "+snap) + "\n")
+		}
+	}
+
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · esc back"))
+	return b.String()
+}
+
+func (m model) viewConfirmRestore() string {
+	var b strings.Builder
+	b.WriteString(renderHeader("Restore"))
+	b.WriteString("\n")
+
+	if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
+		snap := m.restoreSnaps[m.restoreCursor]
+		dst := m.restoreJob.Source
+		b.WriteString("  " + styleDim.Render("snapshot:  ") + styleNormal.Render(snap) + "\n")
+		b.WriteString("  " + styleDim.Render("restore to: ") + styleNormal.Render(dst) + "\n\n")
+		b.WriteString("  " + styleWarning.Render("⚠ this will overwrite existing files") + "\n\n")
+		b.WriteString("  " + styleError.Render("[y]") + styleDim.Render(" yes    ") + styleDim.Render("[n / esc]") + styleDim.Render(" cancel") + "\n")
+	}
 	return b.String()
 }
 

@@ -115,6 +115,66 @@ func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- str
 	return nil
 }
 
+// listSnapshots returns snapshot names for a job, newest first.
+func listSnapshots(job *Job) ([]string, error) {
+	baseDir := expandPath(job.Destination)
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
+	var snaps []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.zst") {
+			snaps = append(snaps, name)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(snaps)))
+	return snaps, nil
+}
+
+func runRestore(job *Job, snapshot string, output chan<- string) error {
+	baseDir := expandPath(job.Destination)
+	dst := expandPath(job.Source)
+
+	output <- fmt.Sprintf("→ restoring %s", job.Name)
+	output <- fmt.Sprintf("  snapshot: %s", snapshot)
+	output <- fmt.Sprintf("  to:       %s", dst)
+
+	if strings.HasSuffix(snapshot, ".tar.gz") || strings.HasSuffix(snapshot, ".tar.zst") {
+		archivePath := filepath.Join(baseDir, snapshot)
+		output <- "  extracting archive..."
+		cmd := exec.Command("tar", "-xzf", archivePath, "-C", dst)
+		if runtime.GOOS == "darwin" {
+			cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("extraction failed: %w\n%s", err, string(out))
+		}
+	} else {
+		src := filepath.Join(baseDir, snapshot) + "/"
+		if !strings.HasSuffix(dst, "/") {
+			dst += "/"
+		}
+		output <- "  syncing files..."
+		cmd := exec.Command("rsync", "-a", "--delete", "--stats", src, dst)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("restore failed: %w\n%s", err, string(out))
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "Number of files:") ||
+				strings.HasPrefix(line, "Total transferred") {
+				output <- "  " + strings.TrimSpace(line)
+			}
+		}
+	}
+
+	output <- "  ✓ restored"
+	return nil
+}
+
 func pruneSnapshots(dest string, max int) (int, error) {
 	if max <= 0 {
 		return 0, nil
