@@ -216,7 +216,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.nestErr = msg.err.Error()
 		}
-		return m, checkNestTSCmd()
+		// delay recheck so tailscale has time to update its state
+		return m, checkNestTSCmdDelayed()
 
 	case schedulerCheckMsg:
 		m.schedulerInfo = schedulerStatus(msg)

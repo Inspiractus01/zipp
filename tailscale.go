@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -60,13 +60,9 @@ func tailscaleLoginCmd() tea.Cmd {
 }
 
 func tailscaleLogoutCmd() tea.Cmd {
-	return func() tea.Msg {
-		out, err := exec.Command("tailscale", "logout").CombinedOutput()
-		if err != nil {
-			return nestTSDoneMsg{err: fmt.Errorf("%s: %w", strings.TrimSpace(string(out)), err)}
-		}
-		return nestTSDoneMsg{}
-	}
+	return tea.ExecProcess(exec.Command("sudo", "tailscale", "logout"), func(err error) tea.Msg {
+		return nestTSDoneMsg{err: err}
+	})
 }
 
 func tailscaleUpCmd() tea.Cmd {
@@ -79,4 +75,12 @@ func tailscaleDownCmd() tea.Cmd {
 	return tea.ExecProcess(exec.Command("sudo", "tailscale", "down"), func(err error) tea.Msg {
 		return nestTSDoneMsg{err: err}
 	})
+}
+
+// checkNestTSCmdDelayed waits briefly before checking, so tailscale has time to update.
+func checkNestTSCmdDelayed() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(1 * time.Second)
+		return nestTSCheckMsg(checkTailscale())
+	}
 }
