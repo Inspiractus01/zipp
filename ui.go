@@ -1,0 +1,495 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+type page int
+
+const (
+	pageMenu page = iota
+	pageJobs
+	pageAdd
+	pageRun
+	pageConfirmDelete
+)
+
+type runResultMsg struct {
+	lines []string
+	err   error
+}
+
+type model struct {
+	page   page
+	cursor int
+	config *Config
+	err    error
+
+	// add job form
+	formStep   int
+	formInputs []textinput.Model
+
+	// run view
+	runOutput []string
+	runDone   bool
+
+	// delete confirm
+	deleteTarget *Job
+}
+
+var menuItems = []string{"Jobs", "Run all", "Add job", "Quit"}
+
+func newModel(cfg *Config) model {
+	return model{
+		page:   pageMenu,
+		config: cfg,
+	}
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			if m.page == pageMenu {
+				return m, tea.Quit
+			}
+		case "esc":
+			if m.page == pageAdd || m.page == pageJobs || m.page == pageRun {
+				m.page = pageMenu
+				m.cursor = 0
+				m.formStep = 0
+				m.formInputs = nil
+				m.runOutput = nil
+				m.runDone = false
+			} else if m.page == pageConfirmDelete {
+				m.page = pageJobs
+				m.deleteTarget = nil
+			}
+			return m, nil
+		}
+
+		switch m.page {
+		case pageMenu:
+			return m.updateMenu(msg)
+		case pageJobs:
+			return m.updateJobs(msg)
+		case pageAdd:
+			return m.updateAdd(msg)
+		case pageRun:
+			return m.updateRun(msg)
+		case pageConfirmDelete:
+			return m.updateConfirmDelete(msg)
+		}
+
+	case runResultMsg:
+		m.runDone = true
+		m.runOutput = msg.lines
+		if msg.err != nil {
+			m.runOutput = append(m.runOutput, styleError.Render("error: "+msg.err.Error()))
+		} else {
+			m.runOutput = append(m.runOutput, styleSuccess.Render("\n✓ all done"))
+		}
+		m.config.save()
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// — Menu —
+
+func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < len(menuItems)-1 {
+			m.cursor++
+		}
+	case "enter":
+		switch menuItems[m.cursor] {
+		case "Jobs":
+			m.page = pageJobs
+			m.cursor = 0
+		case "Add job":
+			m.page = pageAdd
+			m.cursor = 0
+			m.formStep = 0
+			m.formInputs = newFormInputs()
+		case "Run all":
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			return m, runAllCmd(m.config)
+		case "Quit":
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+// — Jobs —
+
+func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < len(m.config.Jobs)-1 {
+			m.cursor++
+		}
+	case "enter":
+		if len(m.config.Jobs) > 0 {
+			job := m.config.Jobs[m.cursor]
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			return m, runJobCmd(m.config, job)
+		}
+	case "d":
+		if len(m.config.Jobs) > 0 {
+			m.deleteTarget = m.config.Jobs[m.cursor]
+			m.page = pageConfirmDelete
+		}
+	case "t":
+		if len(m.config.Jobs) > 0 {
+			job := m.config.Jobs[m.cursor]
+			job.Enabled = !job.Enabled
+			m.config.save()
+		}
+	}
+	return m, nil
+}
+
+// — Add job form —
+
+func newFormInputs() []textinput.Model {
+	fields := []struct {
+		placeholder string
+		charLimit   int
+	}{
+		{"e.g. Documents backup", 64},
+		{"e.g. ~/Documents", 256},
+		{"e.g. /mnt/backup/docs", 256},
+		{"hours between backups, 0 = manual", 4},
+		{"number of snapshots to keep", 4},
+	}
+
+	inputs := make([]textinput.Model, len(fields))
+	for i, f := range fields {
+		ti := textinput.New()
+		ti.Placeholder = f.placeholder
+		ti.CharLimit = f.charLimit
+		if i == 0 {
+			ti.Focus()
+		}
+		inputs[i] = ti
+	}
+	return inputs
+}
+
+var formLabels = []string{"Name", "Source", "Destination", "Interval (h)", "Max snapshots"}
+
+func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if m.formStep < len(m.formInputs)-1 {
+			m.formInputs[m.formStep].Blur()
+			m.formStep++
+			m.formInputs[m.formStep].Focus()
+			return m, textinput.Blink
+		}
+		// save
+		job := m.buildJob()
+		if job != nil {
+			m.config.addJob(job)
+			m.config.save()
+		}
+		m.page = pageJobs
+		m.cursor = len(m.config.Jobs) - 1
+		m.formInputs = nil
+		m.formStep = 0
+		return m, nil
+
+	case "shift+tab":
+		if m.formStep > 0 {
+			m.formInputs[m.formStep].Blur()
+			m.formStep--
+			m.formInputs[m.formStep].Focus()
+			return m, textinput.Blink
+		}
+	}
+
+	var cmd tea.Cmd
+	m.formInputs[m.formStep], cmd = m.formInputs[m.formStep].Update(msg)
+	return m, cmd
+}
+
+func (m model) buildJob() *Job {
+	name := strings.TrimSpace(m.formInputs[0].Value())
+	src := strings.TrimSpace(m.formInputs[1].Value())
+	dest := strings.TrimSpace(m.formInputs[2].Value())
+	if name == "" || src == "" || dest == "" {
+		return nil
+	}
+
+	interval := 0
+	fmt.Sscanf(m.formInputs[3].Value(), "%d", &interval)
+
+	maxSnap := 10
+	if m.formInputs[4].Value() != "" {
+		fmt.Sscanf(m.formInputs[4].Value(), "%d", &maxSnap)
+	}
+
+	return &Job{
+		ID:            fmt.Sprintf("%x", time.Now().UnixNano()),
+		Name:          name,
+		Source:        src,
+		Destination:   dest,
+		IntervalHours: interval,
+		MaxSnapshots:  maxSnap,
+		Enabled:       true,
+	}
+}
+
+// — Run view —
+
+func (m model) updateRun(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.runDone {
+		switch msg.String() {
+		case "enter", "esc":
+			m.page = pageMenu
+			m.runOutput = nil
+			m.runDone = false
+		}
+	}
+	return m, nil
+}
+
+// — Delete confirm —
+
+func (m model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		if m.deleteTarget != nil {
+			m.config.removeJob(m.deleteTarget.ID)
+			m.config.save()
+			if m.cursor >= len(m.config.Jobs) && m.cursor > 0 {
+				m.cursor--
+			}
+		}
+		m.deleteTarget = nil
+		m.page = pageJobs
+	case "n", "esc":
+		m.deleteTarget = nil
+		m.page = pageJobs
+	}
+	return m, nil
+}
+
+// — Views —
+
+func (m model) View() string {
+	switch m.page {
+	case pageMenu:
+		return m.viewMenu()
+	case pageJobs:
+		return m.viewJobs()
+	case pageAdd:
+		return m.viewAdd()
+	case pageRun:
+		return m.viewRun()
+	case pageConfirmDelete:
+		return m.viewConfirmDelete()
+	}
+	return ""
+}
+
+func (m model) viewMenu() string {
+	var b strings.Builder
+	b.WriteString(header(""))
+	b.WriteString("\n")
+
+	for i, item := range menuItems {
+		if i == m.cursor {
+			b.WriteString("  " + styleSelected.Render("▸ "+item))
+		} else {
+			b.WriteString("  " + styleDim.Render("  "+item))
+		}
+		if item == "Jobs" && len(m.config.Jobs) > 0 {
+			b.WriteString(styleDim.Render(fmt.Sprintf("   %d total", len(m.config.Jobs))))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · q quit"))
+	return b.String()
+}
+
+func (m model) viewJobs() string {
+	var b strings.Builder
+	b.WriteString(header("Jobs"))
+	b.WriteString("\n")
+
+	if len(m.config.Jobs) == 0 {
+		b.WriteString(styleDim.Render("  no jobs yet — press esc and add one\n"))
+	} else {
+		for i, job := range m.config.Jobs {
+			selected := i == m.cursor
+
+			var indicator string
+			if !job.Enabled {
+				indicator = styleError.Render("✗")
+			} else if job.isDue() {
+				indicator = styleWarning.Render("⚡")
+			} else {
+				indicator = styleSuccess.Render("✓")
+			}
+
+			name := job.Name
+			if selected {
+				name = styleSelected.Render(name)
+			} else {
+				name = styleNormal.Render(name)
+			}
+
+			next := styleDim.Render(job.nextRun())
+
+			prefix := "  "
+			if selected {
+				prefix = styleSelected.Render("▸ ")
+			}
+
+			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+name, next)
+			b.WriteString(lipgloss.NewStyle().Width(60).Render(line) + "\n")
+		}
+	}
+
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter run · d delete · t toggle · esc back"))
+	return b.String()
+}
+
+func (m model) viewAdd() string {
+	var b strings.Builder
+	b.WriteString(header("Add job"))
+	b.WriteString("\n")
+
+	for i, label := range formLabels {
+		lStyle := styleLabel
+		var val string
+
+		if i == m.formStep {
+			lStyle = lStyle.Copy().Foreground(colorGreen)
+			val = m.formInputs[i].View()
+		} else if i < m.formStep {
+			val = styleNormal.Render(m.formInputs[i].Value())
+		} else {
+			val = styleDim.Render(m.formInputs[i].Placeholder)
+		}
+
+		b.WriteString("  " + lStyle.Render(label+":") + "  " + val + "\n")
+	}
+
+	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
+	return b.String()
+}
+
+func (m model) viewRun() string {
+	var b strings.Builder
+	b.WriteString(header("Running"))
+	b.WriteString("\n")
+
+	for _, line := range m.runOutput {
+		b.WriteString("  " + line + "\n")
+	}
+
+	if !m.runDone {
+		b.WriteString("\n  " + styleDim.Render("running..."))
+	} else {
+		b.WriteString(styleHint.Render("\n  enter to go back"))
+	}
+
+	return b.String()
+}
+
+func (m model) viewConfirmDelete() string {
+	var b strings.Builder
+	b.WriteString(header("Delete job"))
+	b.WriteString("\n")
+
+	if m.deleteTarget != nil {
+		b.WriteString("  " + styleNormal.Render("Delete ") + styleError.Render(m.deleteTarget.Name) + styleNormal.Render("?") + "\n\n")
+		b.WriteString("  " + styleError.Render("y") + styleDim.Render(" yes  ") + styleDim.Render("n esc") + styleDim.Render(" no") + "\n")
+	}
+	return b.String()
+}
+
+// — Cmds —
+
+func runAllCmd(cfg *Config) tea.Cmd {
+	return func() tea.Msg {
+		out := make(chan string, 128)
+		var runErr error
+		var lines []string
+
+		go func() {
+			defer close(out)
+			ran := 0
+			for _, job := range cfg.Jobs {
+				if !job.Enabled {
+					continue
+				}
+				if err := runJob(job, out); err != nil {
+					out <- styleError.Render("✗ " + err.Error())
+					runErr = err
+				}
+				ran++
+			}
+			if ran == 0 {
+				out <- styleDim.Render("no enabled jobs to run")
+			}
+		}()
+
+		for line := range out {
+			lines = append(lines, line)
+		}
+		return runResultMsg{lines: lines, err: runErr}
+	}
+}
+
+func runJobCmd(cfg *Config, job *Job) tea.Cmd {
+	return func() tea.Msg {
+		out := make(chan string, 128)
+		var runErr error
+		var lines []string
+
+		go func() {
+			defer close(out)
+			if err := runJob(job, out); err != nil {
+				out <- styleError.Render("✗ " + err.Error())
+				runErr = err
+			}
+		}()
+
+		for line := range out {
+			lines = append(lines, line)
+		}
+		return runResultMsg{lines: lines, err: runErr}
+	}
+}
