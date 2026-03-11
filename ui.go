@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -45,6 +46,19 @@ type jobDoneMsg struct{ err error }
 // tickMsg drives the fly animation.
 type tickMsg struct{}
 
+type nestHealthMsg struct{ ok bool }
+
+func nestHealthCmd(address string) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := http.Get("http://" + address + "/health")
+		if err != nil {
+			return nestHealthMsg{ok: false}
+		}
+		resp.Body.Close()
+		return nestHealthMsg{ok: resp.StatusCode == 200}
+	}
+}
+
 type updateCheckMsg updateResult
 
 type model struct {
@@ -82,8 +96,10 @@ type model struct {
 	restoreCursor int
 
 	// nest
-	nestInput textinput.Model
-	nestErr   string
+	nestInput     textinput.Model
+	nestErr       string
+	nestConnected bool
+	nestChecking  bool
 }
 
 var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Nest", "Quit"}
@@ -177,6 +193,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case updateCheckMsg:
 		m.updateInfo = updateResult(msg)
+		return m, nil
+
+	case nestHealthMsg:
+		m.nestChecking = false
+		m.nestConnected = msg.ok
 		return m, nil
 
 	case schedulerCheckMsg:
@@ -333,12 +354,22 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, runUpdateCmd()
 		case "Nest":
 			ti := textinput.New()
-			ti.Placeholder = "paste connect code from zipp-nest"
-			ti.Width = 60
+			ti.Placeholder = "zipp-nest address  e.g. 100.86.253.68:9090"
+			ti.Width = 52
+			if m.config.Nest != nil {
+				ti.SetValue(m.config.Nest.Address)
+			}
 			ti.Focus()
 			m.nestInput = ti
 			m.nestErr = ""
+			m.nestChecking = false
 			m.page = pageNest
+			var cmds []tea.Cmd
+			if m.config.Nest != nil {
+				m.nestChecking = true
+				cmds = append(cmds, nestHealthCmd(m.config.Nest.Address))
+			}
+			return m, tea.Batch(cmds...)
 		case "Quit":
 			return m, tea.Quit
 		}
@@ -636,10 +667,12 @@ func (m model) viewMenu() string {
 			b.WriteString(styleDim.Render(fmt.Sprintf("   %d total", len(m.config.Jobs))))
 		}
 		if item == "Nest" {
-			if m.config.Nest != nil {
-				b.WriteString(styleSuccess.Render("   ✓ " + m.config.Nest.Address))
+			if m.nestConnected {
+				b.WriteString(styleSuccess.Render("   ✓ connected"))
+			} else if m.config.Nest != nil {
+				b.WriteString(styleWarning.Render("   ○ " + m.config.Nest.Address))
 			} else {
-				b.WriteString(styleDim.Render("   not connected"))
+				b.WriteString(styleDim.Render("   not set up"))
 			}
 		}
 		b.WriteString("\n")
@@ -692,9 +725,9 @@ func (m model) viewJobs() string {
 			}
 			if job.Compress {
 				nameStr += styleDim.Render(" [zip]")
-			if job.NestEnabled {
-				nameStr += styleSuccess.Render(" [nest]")
 			}
+			if job.NestEnabled {
+				nameStr += styleSuccess.Render(" ★")
 			}
 
 			next := styleDim.Render(job.nextRun())
@@ -919,26 +952,22 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.nestErr = ""
 		return m, nil
 	case "enter":
-		code := strings.TrimSpace(m.nestInput.Value())
-		if code == "" {
-			// clear nest config
+		address := strings.TrimSpace(m.nestInput.Value())
+		if address == "" {
 			m.config.Nest = nil
+			m.nestConnected = false
 			m.config.save()
 			m.page = pageMenu
 			return m, nil
 		}
-		addr, token, err := decodeConnCode(code)
-		if err != nil {
-			m.nestErr = "invalid code"
-			return m, nil
-		}
-		m.config.Nest = &NestConfig{Address: addr, Token: token}
+		m.config.Nest = &NestConfig{Address: address}
 		if err := m.config.save(); err != nil {
 			m.nestErr = "could not save: " + err.Error()
 			return m, nil
 		}
-		m.page = pageMenu
-		return m, nil
+		m.nestChecking = true
+		m.nestErr = ""
+		return m, nestHealthCmd(address)
 	}
 	var cmd tea.Cmd
 	m.nestInput, cmd = m.nestInput.Update(msg)
@@ -950,14 +979,21 @@ func (m model) viewNest() string {
 	b.WriteString(renderHeader("Nest"))
 	b.WriteString("\n")
 
-	if m.config.Nest != nil {
+	// connection status
+	if m.nestChecking {
+		b.WriteString(styleDim.Render("  checking connection...") + "\n\n")
+	} else if m.nestConnected {
 		b.WriteString(styleSuccess.Render("  ✓ connected to "+m.config.Nest.Address) + "\n\n")
-		b.WriteString(styleDim.Render("  paste a new code to update, or press enter to keep current\n\n"))
+	} else if m.config.Nest != nil {
+		b.WriteString(styleWarning.Render("  ○ not reachable: "+m.config.Nest.Address) + "\n\n")
 	} else {
-		b.WriteString(styleDim.Render("  paste the connect code from zipp-nest:\n\n"))
+		b.WriteString(styleDim.Render("  no nest configured") + "\n\n")
 	}
 
+	// address input
+	b.WriteString(styleDim.Render("  zipp-nest address:") + "\n")
 	b.WriteString("  " + m.nestInput.View() + "\n")
+	b.WriteString(styleDim.Render("  (e.g. 100.86.253.68:9090  — from zipp-nest Connection info)") + "\n")
 
 	if m.nestErr != "" {
 		b.WriteString("\n  " + styleError.Render("✗ "+m.nestErr) + "\n")

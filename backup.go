@@ -248,7 +248,6 @@ func uploadToNest(job *Job, src, snapshot string, nest *NestConfig, output chan<
 		output <- fmt.Sprintf("  ✗ nest upload failed: %v", err)
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+nest.Token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
