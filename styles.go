@@ -68,10 +68,10 @@ var flyWingFrames = []string{
 }
 
 var flySosakFrames = []string{
-	`  !__!`, // flat
-	`  !,,!`, // extended
-	`  !__!`,
-	`  !,,!`,
+	`   !__!`, // flat
+	`   !,,!`, // extended
+	`   !__!`,
+	`   !,,!`,
 }
 
 var styleSosak = lipgloss.NewStyle().Foreground(colorRed)
