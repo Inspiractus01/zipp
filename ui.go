@@ -991,28 +991,33 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) nestMenuItems() []string {
 	var items []string
+
+	// server code always first — available regardless of Tailscale state
+	if m.config.Nest != nil {
+		items = append(items, "Change server code")
+		if m.config.Nest.Disabled {
+			items = append(items, "Enable uploads")
+		} else {
+			items = append(items, "Disable uploads")
+		}
+	} else {
+		items = append(items, "Enter server code")
+	}
+
+	// tailscale controls after
 	if !m.nestTSStatus.installed {
 		items = append(items, "Setup Tailscale")
-	} else if !m.nestTSStatus.loggedIn {
-		items = append(items, "Login to Tailscale")
-	} else {
-		items = append(items, "Logout from Tailscale")
+	} else if m.nestTSStatus.loggedIn {
 		if m.nestTSStatus.running {
 			items = append(items, "Disable Tailscale")
 		} else {
 			items = append(items, "Enable Tailscale")
 		}
-		if m.config.Nest != nil {
-			items = append(items, "Change server code")
-			if m.config.Nest.Disabled {
-				items = append(items, "Enable uploads")
-			} else {
-				items = append(items, "Disable uploads")
-			}
-		} else {
-			items = append(items, "Enter server code")
-		}
+		items = append(items, "Logout from Tailscale")
+	} else {
+		items = append(items, "Login to Tailscale")
 	}
+
 	items = append(items, "Back")
 	return items
 }
