@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 )
 
 const defaultNestPort = 9090
 
-// decodeNestCode decodes a 10-digit code (XXXXX-XXXXX) back to "IP:port".
+// decodeNestCode decodes an 8-char hex code (XXXX-XXXX) back to "IP:port".
 // If input already contains a dot it is treated as a full IP:port address.
-// Example: "16834-22532" → "100.86.253.68:9090"
-//          "32322-35781" → "192.168.1.5:9090"
+// Example: "6456-fd44" → "100.86.253.68:9090"
+//
+//	"c0a8-0105" → "192.168.1.5:9090"
 func decodeNestCode(code string) (string, error) {
 	code = strings.TrimSpace(code)
 
@@ -20,11 +20,12 @@ func decodeNestCode(code string) (string, error) {
 		return code, nil
 	}
 
-	clean := strings.ReplaceAll(code, "-", "")
-	if len(clean) != 10 {
-		return "", fmt.Errorf("expected a 10-digit code like 16834-22532")
+	clean := strings.ToLower(strings.ReplaceAll(code, "-", ""))
+	if len(clean) != 8 {
+		return "", fmt.Errorf("expected an 8-char code like 6456-fd44")
 	}
-	val, err := strconv.ParseUint(clean, 10, 32)
+	var val uint32
+	_, err := fmt.Sscanf(clean, "%x", &val)
 	if err != nil {
 		return "", fmt.Errorf("invalid code")
 	}
