@@ -225,6 +225,13 @@
       transform: translateY(-50%); pointer-events: none;
     }
 
+    /* status text below each diagram node */
+    .diag-status {
+      font-size: 11px; min-height: 17px; text-align: center;
+      letter-spacing: .04em; margin-top: 3px;
+      transition: opacity .3s;
+    }
+
     /* ── section headings ── */
     .s-label {
       font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
@@ -532,6 +539,7 @@
         <div class="conn-node-name v">zipp</div>
       </div>
       <div class="conn-node-sub">your machine</div>
+      <div class="diag-status" id="diag-zipp-status"></div>
     </div>
 
     <!-- pipe -->
@@ -558,6 +566,7 @@
         <div class="conn-track" id="pkt-track"></div>
       </div>
       <div class="conn-label-bot">over the internet</div>
+      <div class="diag-status" id="diag-pipe-status"></div>
     </div>
 
     <!-- nest node -->
@@ -570,6 +579,7 @@
         <div class="conn-node-name t">zipp-nest</div>
       </div>
       <div class="conn-node-sub">your server / NAS</div>
+      <div class="diag-status" id="diag-nest-status"></div>
     </div>
 
   </div>
@@ -777,10 +787,35 @@ function stopNestAnim() {
   if (diagNestBox) diagNestBox.classList.remove('active');
 }
 
-/* ── packet animation ── */
-function animatePacket(track, forward, color, glow, duration, done) {
-  const dot = document.createElement('div');
+/* ── packet + node-dot animation ── */
+let _nodeDot = null;
+
+function showNodeDot(track, atLeft, color, glow) {
+  if (_nodeDot) { _nodeDot.remove(); _nodeDot = null; }
+  if (!track) return;
   const w = track.offsetWidth;
+  const dot = document.createElement('div');
+  dot.style.cssText = `
+    position:absolute; width:9px; height:9px; border-radius:50%;
+    top:50%; transform:translateY(-50%);
+    background:${color};
+    box-shadow:0 0 10px ${glow}, 0 0 26px ${glow};
+    pointer-events:none; z-index:2;
+    left:${atLeft ? '2px' : (w - 11) + 'px'};
+  `;
+  track.appendChild(dot);
+  _nodeDot = dot;
+}
+
+function hideNodeDot() {
+  if (_nodeDot) { _nodeDot.remove(); _nodeDot = null; }
+}
+
+function animPacket(track, fromLeft, color, glow, duration, done) {
+  hideNodeDot();
+  if (!track) return;
+  const w = track.offsetWidth;
+  const dot = document.createElement('div');
   dot.style.cssText = `
     position:absolute; width:9px; height:9px; border-radius:50%;
     top:50%; transform:translateY(-50%);
@@ -789,39 +824,82 @@ function animatePacket(track, forward, color, glow, duration, done) {
     pointer-events:none; z-index:2;
   `;
   track.appendChild(dot);
-  const startX = forward ? -9 : w + 9;
-  const endX   = forward ? w + 9 : -9;
+  const sx = fromLeft ? 2 : w - 11;
+  const ex = fromLeft ? w - 11 : 2;
   const t0 = performance.now();
-  (function frame(now) {
-    const p = Math.min((now - t0) / duration, 1);
-    dot.style.left = (startX + (endX - startX) * p) + 'px';
-    if (p < 1) { requestAnimationFrame(frame); }
-    else        { dot.remove(); done(); }
+  (function frame(ts) {
+    const p = Math.min((ts - t0) / duration, 1);
+    const ep = p < .5 ? 2*p*p : -1+(4-2*p)*p; // ease-in-out
+    dot.style.left = (sx + (ex - sx) * ep) + 'px';
+    p < 1 ? requestAnimationFrame(frame) : (dot.remove(), done());
   })(t0);
+}
+
+function setStatus(id, text, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = color || 'var(--muted)';
 }
 
 function startPacketLoop() {
   const track = document.getElementById('pkt-track');
   if (!track) return;
-  function loop() {
-    /* violet: zipp → nest  —  fly animates while packet is departing from zipp */
+
+  /* Phase 1 — dot sitting at zipp, fly ON */
+  function phase1() {
+    showNodeDot(track, true, '#a78bfa', 'rgba(167,139,250,.55)');
     startDiagFly();
     if (diagZippBox) diagZippBox.classList.add('active');
-    animatePacket(track, true, '#a78bfa', 'rgba(167,139,250,0.5)', 2200, () => {
-      /* packet arrived at nest */
+    setStatus('diag-zipp-status', 'backing up...', 'var(--lavender)');
+    setStatus('diag-pipe-status', '');
+    setStatus('diag-nest-status', '');
+    setTimeout(phase2, 1600);
+  }
+
+  /* Phase 2 — dot leaves zipp, fly OFF, travels to nest */
+  function phase2() {
+    stopDiagFly();
+    if (diagZippBox) diagZippBox.classList.remove('active');
+    setStatus('diag-zipp-status', '');
+    setStatus('diag-pipe-status', 'sending to nest...', 'var(--muted)');
+    animPacket(track, true, '#a78bfa', 'rgba(167,139,250,.55)', 2000, phase3);
+  }
+
+  /* Phase 3 — dot arrives at nest, nest anim ON */
+  function phase3() {
+    showNodeDot(track, false, '#a78bfa', 'rgba(167,139,250,.55)');
+    startNestAnim();
+    if (diagNestBox) diagNestBox.classList.add('active');
+    setStatus('diag-pipe-status', '');
+    setStatus('diag-nest-status', 'storing snapshot...', 'var(--teal-l)');
+    setTimeout(phase4, 1600);
+  }
+
+  /* Phase 4 — dot leaves nest, nest anim OFF, ack travels back */
+  function phase4() {
+    stopNestAnim();
+    if (diagNestBox) diagNestBox.classList.remove('active');
+    setStatus('diag-nest-status', '');
+    animPacket(track, false, '#4ade80', 'rgba(74,222,128,.55)', 2000, phase5);
+  }
+
+  /* Phase 5 — ack arrives at zipp, fly ON, show success */
+  function phase5() {
+    showNodeDot(track, true, '#4ade80', 'rgba(74,222,128,.55)');
+    startDiagFly();
+    if (diagZippBox) diagZippBox.classList.add('active');
+    setStatus('diag-pipe-status', '✓ backup complete', 'var(--green)');
+    setTimeout(() => {
+      hideNodeDot();
       stopDiagFly();
       if (diagZippBox) diagZippBox.classList.remove('active');
-      startNestAnim();
-      setTimeout(() => {
-        /* nest done storing — send ack: green nest → zipp */
-        stopNestAnim();
-        animatePacket(track, false, '#4ade80', 'rgba(74,222,128,0.5)', 2200, () => {
-          setTimeout(loop, 2000);
-        });
-      }, 900);
-    });
+      setStatus('diag-pipe-status', '');
+      setTimeout(phase1, 300);
+    }, 1200);
   }
-  setTimeout(loop, 600);
+
+  setTimeout(phase1, 600);
 }
 startPacketLoop();
 
