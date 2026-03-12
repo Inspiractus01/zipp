@@ -40,8 +40,6 @@ Pair with [zipp-nest](https://github.com/Inspiractus01/zipp-nest) to back up to 
 
 Config: `~/.zipp/config.json`
 
-## Website & SEO
+## Website
 
-- The marketing page in `docs/` now includes structured metadata and Open Graph tags that point to `https://zipp.rest/`. Update those values if the canonical domain changes.
-- `docs/sitemap.xml` and `docs/robots.txt` are shipped inside the Docker image so search engines can index the page. Adjust the `lastmod` field or add entries if you create additional URLs.
-- `docs/social-card.png` is referenced by OG/Twitter tags; replace it with another 1200×630 image if you want a different preview.
+The landing page moved to its own repo (`zipp-site`). Clone it separately, keep it private, and trigger deployments with the webhook script in that repo.

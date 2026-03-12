@@ -1,8 +1,0 @@
-services:
-  zipp-site:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8001:80"
-    restart: unless-stopped
