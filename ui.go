@@ -23,7 +23,6 @@ const (
 	pageRestore
 	pageConfirmRestore
 	pageNest
-	pageAddType
 )
 
 // runResultMsg is used by setup/update cmds (non-streaming).
@@ -108,9 +107,6 @@ type model struct {
 	restoreSnaps  []string
 	restoreCursor int
 
-	// add type
-	addLive bool
-
 	// nest
 	nestInput      textinput.Model
 	nestErr        string
@@ -173,17 +169,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "esc":
-			if m.page == pageAddType {
-				m.page = pageJobs
-				m.addLive = false
-				return m, nil
-			}
 			if m.page == pageAdd || m.page == pageEdit || m.page == pageJobs || m.page == pageRun {
 				m.page = pageMenu
 				m.cursor = 0
 				m.formStep = 0
 				m.formInputs = nil
-				m.addLive = false
 				m.runOutput = nil
 				m.runDone = false
 			} else if m.page == pageConfirmDelete {
@@ -217,8 +207,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateRestore(msg)
 		case pageConfirmRestore:
 			return m.updateConfirmRestore(msg)
-		case pageAddType:
-			return m.updateAddType(msg)
 		case pageNest:
 			return m.updateNest(msg)
 		}
@@ -385,8 +373,9 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.page = pageJobs
 			m.cursor = 0
 		case "Add job":
-			m.page = pageAddType
-			m.addLive = false
+			m.page = pageAdd
+			m.formStep = 0
+			m.formInputs = newFormInputs()
 		case "Run all":
 			m.page = pageRun
 			m.runOutput = nil
@@ -445,13 +434,7 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.config.Jobs) > 0 {
 			m.editTarget = m.config.Jobs[m.cursor]
 			m.formStep = 0
-			if m.editTarget.WatchMode {
-				m.addLive = true
-				m.formInputs = newLiveInputsFrom(m.editTarget)
-			} else {
-				m.addLive = false
-				m.formInputs = newFormInputsFrom(m.editTarget)
-			}
+			m.formInputs = newFormInputsFrom(m.editTarget)
 			m.page = pageEdit
 		}
 	case "d":
@@ -477,12 +460,6 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				job.NestMode = "local"
 			}
 			job.NestEnabled = false // clear legacy field
-			m.config.save()
-		}
-	case "w":
-		if len(m.config.Jobs) > 0 {
-			job := m.config.Jobs[m.cursor]
-			job.WatchMode = !job.WatchMode
 			m.config.save()
 		}
 	case "r":
@@ -530,31 +507,6 @@ func newFormInputs() []textinput.Model {
 	return inputs
 }
 
-func newLiveInputs() []textinput.Model {
-	fields := []struct{ placeholder string; charLimit int }{
-		{"e.g. minecraft-server", 64},
-		{"e.g. ~/server/world", 256},
-	}
-	inputs := make([]textinput.Model, len(fields))
-	for i, f := range fields {
-		ti := textinput.New()
-		ti.Placeholder = f.placeholder
-		ti.CharLimit = f.charLimit
-		if i == 0 {
-			ti.Focus()
-		}
-		inputs[i] = ti
-	}
-	return inputs
-}
-
-func newLiveInputsFrom(j *Job) []textinput.Model {
-	inputs := newLiveInputs()
-	inputs[0].SetValue(j.Name)
-	inputs[1].SetValue(j.Source)
-	return inputs
-}
-
 func newFormInputsFrom(j *Job) []textinput.Model {
 	inputs := newFormInputs()
 	inputs[0].SetValue(j.Name)
@@ -571,24 +523,6 @@ func newFormInputsFrom(j *Job) []textinput.Model {
 }
 
 var formLabels = []string{"Name", "Source", "Destination", "Interval (h)", "Max snapshots", "Compress"}
-
-func (m model) updateAddType(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "s":
-		m.addLive = false
-		m.formStep = 0
-		m.formInputs = newFormInputs()
-		m.page = pageAdd
-		return m, textinput.Blink
-	case "l":
-		m.addLive = true
-		m.formStep = 0
-		m.formInputs = newLiveInputs()
-		m.page = pageAdd
-		return m, textinput.Blink
-	}
-	return m, nil
-}
 
 func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -630,18 +564,6 @@ func (m model) buildJob() *Job {
 	src := strings.TrimSpace(m.formInputs[1].Value())
 	if name == "" || src == "" {
 		return nil
-	}
-
-	if m.addLive {
-		return &Job{
-			ID:           fmt.Sprintf("%x", time.Now().UnixNano()),
-			Name:         name,
-			Source:       src,
-			NestMode:     "nest",
-			WatchMode:    true,
-			MaxSnapshots: 1,
-			Enabled:      true,
-		}
 	}
 
 	dest := strings.TrimSpace(m.formInputs[2].Value())
@@ -686,13 +608,10 @@ func (m model) updateEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.editTarget != nil {
 			m.editTarget.Name = strings.TrimSpace(m.formInputs[0].Value())
 			m.editTarget.Source = strings.TrimSpace(m.formInputs[1].Value())
-			if !m.addLive {
-				m.editTarget.Destination = strings.TrimSpace(m.formInputs[2].Value())
-				fmt.Sscanf(m.formInputs[3].Value(), "%d", &m.editTarget.IntervalHours)
-				fmt.Sscanf(m.formInputs[4].Value(), "%d", &m.editTarget.MaxSnapshots)
-				m.editTarget.Compress = strings.ToLower(strings.TrimSpace(m.formInputs[5].Value())) == "y"
-			}
-			m.addLive = false
+			m.editTarget.Destination = strings.TrimSpace(m.formInputs[2].Value())
+			fmt.Sscanf(m.formInputs[3].Value(), "%d", &m.editTarget.IntervalHours)
+			fmt.Sscanf(m.formInputs[4].Value(), "%d", &m.editTarget.MaxSnapshots)
+			m.editTarget.Compress = strings.ToLower(strings.TrimSpace(m.formInputs[5].Value())) == "y"
 			m.config.save()
 		}
 		m.editTarget = nil
@@ -772,25 +691,8 @@ func (m model) View() string {
 		return m.viewConfirmRestore()
 	case pageNest:
 		return m.viewNest()
-	case pageAddType:
-		return m.viewAddType()
 	}
 	return ""
-}
-
-func (m model) viewAddType() string {
-	var b strings.Builder
-	b.WriteString(renderHeader("add job"))
-	b.WriteString("\n")
-	b.WriteString(styleDim.Render("  choose type:") + "\n\n")
-
-	col1 := lipgloss.NewStyle().Width(12).Foreground(colorWhite).Bold(true)
-	col2 := styleDim
-
-	b.WriteString("  " + styleSelected.Render("s") + "  " + col1.Render("snapshot") + col2.Render("scheduled · keeps history · local or nest") + "\n")
-	b.WriteString("  " + styleSelected.Render("l") + "  " + col1.Render("live sync") + col2.Render("syncs on file change · always mirrors latest to nest") + "\n")
-	b.WriteString(styleHint.Render("\n  s / l to choose · esc cancel"))
-	return b.String()
 }
 
 func (m model) viewMenu() string {
@@ -857,8 +759,6 @@ func (m model) viewJobs() string {
 			var indicator string
 			if !job.Enabled {
 				indicator = styleError.Render("✗")
-			} else if job.WatchMode {
-				indicator = styleLive.Render("~")
 			} else if job.isDue() {
 				indicator = styleWarning.Render("⚡")
 			} else {
@@ -882,10 +782,6 @@ func (m model) viewJobs() string {
 			default:
 				nameStr += styleDim.Render(" [local]")
 			}
-			if job.WatchMode {
-				nameStr += styleLive.Render(" [live]")
-			}
-
 			next := styleDim.Render(job.nextRun())
 
 			prefix := "  "
@@ -909,26 +805,17 @@ func (m model) viewJobs() string {
 		keyHint("r", "restore", colorViolet),
 		keyHint("t", "on/off", colorFuchsia),
 		keyHint("n", "mode", colorGreen),
-		keyHint("w", "live sync", colorLive),
 		keyHint("esc", "back", colorMuted),
 	}, sep))
 	return b.String()
 }
 
-var liveFormLabels = []string{"Name", "Source"}
-
 func (m model) viewAdd() string {
 	var b strings.Builder
-	title := "add snapshot job"
-	labels := formLabels
-	if m.addLive {
-		title = "add live sync job"
-		labels = liveFormLabels
-	}
-	b.WriteString(renderHeader(title))
+	b.WriteString(renderHeader("add job"))
 	b.WriteString("\n")
 
-	for i, label := range labels {
+	for i, label := range formLabels {
 		lStyle := styleLabel
 		var val string
 
@@ -942,14 +829,11 @@ func (m model) viewAdd() string {
 		}
 
 		b.WriteString("  " + lStyle.Render(label+":") + "  " + val + "\n")
-		if !m.addLive && i == m.formStep && i == 5 {
+		if i == m.formStep && i == 5 {
 			b.WriteString("  " + styleDim.Render("                 saves space but takes longer to backup") + "\n")
 		}
 	}
 
-	if m.addLive {
-		b.WriteString("\n  " + styleDim.Render("syncs to nest on every file change · run: zipp watch"))
-	}
 	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
 	return b.String()
 }
@@ -1021,14 +905,10 @@ func (m model) viewRunDone() string {
 
 func (m model) viewEdit() string {
 	var b strings.Builder
-	labels := formLabels
-	if m.addLive {
-		labels = liveFormLabels
-	}
 	b.WriteString(renderHeader("edit job"))
 	b.WriteString("\n")
 
-	for i, label := range labels {
+	for i, label := range formLabels {
 		lStyle := styleLabel
 		var val string
 		if i == m.formStep {

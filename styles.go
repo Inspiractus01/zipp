@@ -17,7 +17,6 @@ var (
 	colorGreen    = lipgloss.Color("#86efac")
 	colorRed      = lipgloss.Color("#f87171")
 	colorYellow   = lipgloss.Color("#fbbf24")
-	colorLive     = lipgloss.Color("#34d399") // teal-green for live sync
 
 	styleSelected = lipgloss.NewStyle().
 			Foreground(colorLavender).
@@ -48,10 +47,6 @@ var (
 
 	styleUpdate = lipgloss.NewStyle().
 			Foreground(colorFuchsia).
-			Bold(true)
-
-	styleLive = lipgloss.NewStyle().
-			Foreground(colorLive).
 			Bold(true)
 
 	styleLogo = lipgloss.NewStyle().
