@@ -797,6 +797,10 @@ func (m model) viewJobs() string {
 					b.WriteString("     " + styleWarning.Render("⚠ backup works only on nest") + "\n")
 				}
 			}
+			// nest not configured warning
+			if (job.mode() == "nest" || job.mode() == "both") && m.config.Nest == nil {
+				b.WriteString("     " + styleError.Render("⚠ nest needs to be configured") + "\n")
+			}
 		}
 	}
 
@@ -1016,14 +1020,9 @@ func (m model) updateNest(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) nestMenuItems() []string {
 	var items []string
 
-	// server code always first — available regardless of Tailscale state
 	if m.config.Nest != nil {
 		items = append(items, "Change server code")
-		if m.config.Nest.Disabled {
-			items = append(items, "Enable uploads")
-		} else {
-			items = append(items, "Disable uploads")
-		}
+		items = append(items, "Disable nest")
 	} else {
 		items = append(items, "Enter server code")
 	}
@@ -1075,19 +1074,13 @@ func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "Logout from Tailscale":
 			m.nestConnected = false
 			return m, tailscaleLogoutCmd()
-		case "Enable uploads":
-			if m.config.Nest != nil {
-				m.config.Nest.Disabled = false
-				m.config.save()
-			}
-		case "Disable uploads":
-			if m.config.Nest != nil {
-				m.config.Nest.Disabled = true
-				m.config.save()
-			}
+		case "Disable nest":
+			m.config.Nest = nil
+			m.nestConnected = false
+			m.config.save()
 		case "Enter server code", "Change server code":
 			ti := textinput.New()
-			ti.Placeholder = "short code (e.g. 16834-22532)"
+			ti.Placeholder = "short code (e.g. 6456-fd44)"
 			ti.Width = 40
 			if m.config.Nest != nil {
 				ti.SetValue(m.config.Nest.Address)
