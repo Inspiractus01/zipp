@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -13,6 +15,24 @@ func main() {
 	if len(os.Args) > 1 {
 		runCLI(os.Args[1:])
 		return
+	}
+
+	if result := checkForUpdate(); result.hasUpdate {
+		fmt.Printf("\n  zipp v%s → v%s  updating...\n\n", version, result.latest)
+		cmd := exec.Command("bash", "-c",
+			"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
+		)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "\n  update failed: %v\n\n", err)
+		} else {
+			self, err := os.Executable()
+			if err == nil {
+				syscall.Exec(self, os.Args, os.Environ())
+			}
+		}
 	}
 
 	cfg, err := loadConfig()
