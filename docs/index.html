@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>zipp — simple, fast backups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -24,7 +27,7 @@
     body {
       background: var(--bg);
       color: var(--white);
-      font-family: 'JetBrains Mono','Fira Code','Cascadia Code','Courier New',monospace;
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
       font-size: 15px;
       line-height: 1.7;
       -webkit-font-smoothing: antialiased;
@@ -150,36 +153,22 @@
     /* pipe */
     .conn-pipe {
       flex: 1; display: flex; flex-direction: column; align-items: center;
-      gap: 6px; padding: 0 8px; min-width: 200px; max-width: 320px;
-      position: relative;
+      gap: 8px; padding: 0 12px; min-width: 200px; max-width: 320px;
     }
-    .conn-label-top { font-size: 11px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+    .conn-label-top {
+      font-size: 12px; color: #c8d0dc; letter-spacing: .04em;
+      font-weight: 500;
+    }
     .conn-track {
-      width: 100%; height: 20px; position: relative; overflow: hidden;
+      width: 100%; height: 16px; position: relative; overflow: hidden;
       display: flex; align-items: center;
     }
     .conn-line-bg {
       position: absolute; top: 50%; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, rgba(123,94,248,.3), rgba(13,148,136,.3));
+      background: rgba(255,255,255,.1);
       transform: translateY(-50%);
     }
-    /* animated packets */
-    .pkt {
-      position: absolute; width: 6px; height: 6px; border-radius: 50%;
-      top: 50%; transform: translateY(-50%);
-      animation: pkt-move 2.4s linear infinite;
-    }
-    .pkt.v { background: var(--lavender); box-shadow: 0 0 6px var(--lavender); }
-    .pkt.t { background: var(--teal-l);   box-shadow: 0 0 6px var(--teal-l); animation-direction: reverse; }
-    .pkt:nth-child(2) { animation-delay: -.8s; }
-    .pkt:nth-child(3) { animation-delay: -1.6s; }
-    @keyframes pkt-move {
-      from { left: -6px; opacity: 0; }
-      5%   { opacity: 1; }
-      95%  { opacity: 1; }
-      to   { left: calc(100% + 6px); opacity: 0; }
-    }
-    .conn-label-bot { font-size: 11px; color: var(--dim); }
+    .conn-label-bot { font-size: 11px; color: var(--muted); }
 
     /* ── section headings ── */
     .s-label {
@@ -416,17 +405,8 @@
     <!-- pipe -->
     <div class="conn-pipe">
       <div class="conn-label-top">tailscale · encrypted</div>
-      <div class="conn-track">
+      <div class="conn-track" id="pkt-track">
         <div class="conn-line-bg"></div>
-        <div class="pkt v"></div>
-        <div class="pkt v"></div>
-        <div class="pkt v"></div>
-      </div>
-      <div class="conn-track" style="margin-top:2px">
-        <div class="conn-line-bg" style="background:linear-gradient(90deg,rgba(13,148,136,.3),rgba(123,94,248,.3))"></div>
-        <div class="pkt t"></div>
-        <div class="pkt t"></div>
-        <div class="pkt t"></div>
       </div>
       <div class="conn-label-bot">over the internet</div>
     </div>
@@ -593,6 +573,56 @@ async function fetchVer(repo) {
     if (el) el.textContent = nv;
   });
 })();
+
+/* packet animation — sequential, pea green */
+const PKT_COLOR = '#4ade80';
+const PKT_GLOW  = 'rgba(74,222,128,0.5)';
+
+function animatePacket(track, forward, duration, done) {
+  const dot = document.createElement('div');
+  const w = track.offsetWidth;
+  dot.style.cssText = `
+    position:absolute; width:9px; height:9px; border-radius:50%;
+    top:50%; transform:translateY(-50%);
+    background:${PKT_COLOR};
+    box-shadow:0 0 10px ${PKT_GLOW}, 0 0 24px ${PKT_GLOW};
+    pointer-events:none;
+  `;
+  track.appendChild(dot);
+
+  const startX = forward ? -9 : w + 9;
+  const endX   = forward ? w + 9 : -9;
+  const t0 = performance.now();
+
+  (function frame(now) {
+    const p = Math.min((now - t0) / duration, 1);
+    dot.style.left = (startX + (endX - startX) * p) + 'px';
+    if (p < 1) { requestAnimationFrame(frame); }
+    else        { dot.remove(); done(); }
+  })(t0);
+}
+
+function startPacketLoop() {
+  const track = document.getElementById('pkt-track');
+  if (!track) return;
+
+  function loop() {
+    // zipp → nest (forward)
+    animatePacket(track, true, 2200, () => {
+      // pause — data arrived at server
+      setTimeout(() => {
+        // nest → zipp (backward, acknowledgment)
+        animatePacket(track, false, 2200, () => {
+          // rest before next cycle
+          setTimeout(loop, 2000);
+        });
+      }, 900);
+    });
+  }
+  // small initial delay so layout is ready
+  setTimeout(loop, 600);
+}
+startPacketLoop();
 
 /* fly wing animation */
 const wingFrames = ['  )()(', '  /\\/\\', '  ~~~~', '  \\/\\/'];
