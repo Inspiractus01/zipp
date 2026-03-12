@@ -782,9 +782,13 @@ func (m model) viewAddType() string {
 	var b strings.Builder
 	b.WriteString(renderHeader("add job"))
 	b.WriteString("\n")
-	b.WriteString(styleNormal.Render("  choose type:\n\n"))
-	b.WriteString("  " + styleSelected.Render("s") + styleDim.Render("  snapshot    ") + styleNormal.Render("scheduled · keeps history · local or nest\n"))
-	b.WriteString("  " + styleSelected.Render("l") + styleDim.Render("  live sync   ") + styleNormal.Render("syncs on file change · always up to date · nest only\n"))
+	b.WriteString(styleDim.Render("  choose type:") + "\n\n")
+
+	col1 := lipgloss.NewStyle().Width(12).Foreground(colorWhite).Bold(true)
+	col2 := styleDim
+
+	b.WriteString("  " + styleSelected.Render("s") + "  " + col1.Render("snapshot") + col2.Render("scheduled · keeps history · local or nest") + "\n")
+	b.WriteString("  " + styleSelected.Render("l") + "  " + col1.Render("live sync") + col2.Render("syncs on file change · always mirrors latest to nest") + "\n")
 	b.WriteString(styleHint.Render("\n  s / l to choose · esc cancel"))
 	return b.String()
 }
