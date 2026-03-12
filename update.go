@@ -42,9 +42,22 @@ func checkForUpdate() updateResult {
 	}
 }
 
-// simple semver compare — good enough for x.y.z
+// semver compare: returns true if a > b (both "x.y.z")
 func newerThan(a, b string) bool {
-	return fmt.Sprintf("%010s", a) > fmt.Sprintf("%010s", b)
+	pa := parseSemver(a)
+	pb := parseSemver(b)
+	for i := range pa {
+		if pa[i] != pb[i] {
+			return pa[i] > pb[i]
+		}
+	}
+	return false
+}
+
+func parseSemver(v string) [3]int {
+	var major, minor, patch int
+	fmt.Sscanf(v, "%d.%d.%d", &major, &minor, &patch)
+	return [3]int{major, minor, patch}
 }
 
 type updateDoneMsg struct{ err error }
