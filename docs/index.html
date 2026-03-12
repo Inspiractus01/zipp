@@ -8,20 +8,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --bg:       #0d0d14;
-      --bg2:      #12121e;
-      --bg3:      #1a1a2e;
-      --border:   #1e1e30;
-      --muted:    #6b7280;
+      --bg2:      #111120;
+      --bg3:      #191928;
+      --border:   #1e1e32;
+      --muted:    #8b95a8;
       --dim:      #4b5563;
       --white:    #e2e8f0;
       --violet:   #7b5ef8;
       --lavender: #a78bfa;
-      --purple:   #451ce8;
       --teal:     #0d9488;
       --teal-l:   #5eead4;
       --green:    #86efac;
-      --red:      #f87171;
-      --yellow:   #fbbf24;
     }
     html { scroll-behavior: smooth; }
     body {
@@ -37,219 +34,227 @@
     /* ── nav ── */
     nav {
       position: sticky; top: 0; z-index: 10;
-      background: rgba(13,13,20,.88);
-      backdrop-filter: blur(10px);
+      background: rgba(13,13,20,.9);
+      backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
-      padding: 13px 24px;
+      padding: 13px 32px;
       display: flex; align-items: center; gap: 28px;
     }
-    nav .logo { color: var(--lavender); font-weight: 700; font-size: 16px; }
+    .nav-logo { color: var(--lavender); font-weight: 700; font-size: 16px; }
     nav a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color .15s; }
     nav a:hover { color: var(--white); }
-    nav .spacer { flex: 1; }
+    .nav-spacer { flex: 1; }
     .ver-badge {
       font-size: 12px; padding: 3px 10px;
-      border: 1px solid var(--violet); border-radius: 4px;
-      color: var(--lavender); transition: border-color .3s;
+      border: 1px solid var(--border); border-radius: 4px;
+      color: var(--muted);
     }
 
     /* ── layout ── */
-    .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
-    section { padding: 80px 0; }
+    .wrap { max-width: 800px; margin: 0 auto; padding: 0 32px; }
+    section { padding: 88px 0; }
     section + section { border-top: 1px solid var(--border); }
 
-    /* ────────────────────────────
-       ASCII FLY — animated wings
-    ──────────────────────────────*/
+    /* ── ASCII fly ── */
     .ascii-fly {
-      font-size: 15px; line-height: 1.5;
-      white-space: pre; display: inline-block;
-      color: var(--violet);
-      text-shadow: 0 0 18px rgba(123,94,248,.35);
+      font-size: 15px; line-height: 1.5; white-space: pre;
+      display: inline-block; color: var(--violet);
+      text-shadow: 0 0 20px rgba(123,94,248,.3);
     }
-    .ascii-fly .dots { color: var(--purple); font-weight: 700; }
+    .fly-dots { color: #451ce8; font-weight: 700; }
 
-    /* ────────────────────────────
-       ASCII NEST — glow + orbit
-    ──────────────────────────────*/
-    .nest-wrap {
-      position: relative; display: inline-block;
-      filter: drop-shadow(0 0 14px rgba(13,148,136,.4));
-    }
+    /* ── ASCII nest ── */
     .ascii-nest {
-      font-size: 15px; line-height: 1.5;
-      white-space: pre; display: inline-block;
-      color: var(--teal);
+      font-size: 15px; line-height: 1.5; white-space: pre;
+      display: inline-block; color: var(--teal);
+      text-shadow: 0 0 20px rgba(13,148,136,.3);
     }
-    .ascii-nest .accent { color: var(--teal-l); font-weight: 700; }
+    .nest-accent { color: var(--teal-l); font-weight: 700; }
 
-    /* orbiting dot */
-    .orbit-ring {
-      position: absolute;
-      top: 50%; left: 50%;
-      width: 80px; height: 80px;
-      margin: -40px 0 0 -40px;
-      pointer-events: none;
-      animation: orbit-spin 3s linear infinite;
+    /* ── hero ── */
+    .hero { padding: 100px 0 72px; }
+    .hero-top { display: flex; align-items: center; gap: 48px; flex-wrap: wrap; margin-bottom: 48px; }
+    h1 {
+      font-size: 42px; font-weight: 700; letter-spacing: -.02em;
+      color: var(--lavender); line-height: 1.12;
     }
-    .orbit-dot {
-      position: absolute; top: 0; left: 50%;
-      width: 6px; height: 6px; margin-left: -3px;
-      background: var(--teal-l);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--teal-l);
-    }
-    @keyframes orbit-spin { to { transform: rotate(360deg); } }
-
-    /* connected badge */
-    .connected-badge {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 12px; color: var(--teal-l);
-      margin-top: 10px;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-    }
-    .pulse-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 0 0 rgba(134,239,172,.7);
-      animation: pulse 2s ease infinite;
-    }
-    @keyframes pulse {
-      0%   { box-shadow: 0 0 0 0   rgba(134,239,172,.7); }
-      70%  { box-shadow: 0 0 0 8px rgba(134,239,172,0);  }
-      100% { box-shadow: 0 0 0 0   rgba(134,239,172,0);  }
-    }
-
-    /* ── hero layout ── */
-    .hero { padding: 96px 0 64px; }
-    .hero-inner { display: flex; align-items: center; gap: 44px; flex-wrap: wrap; }
-    .hero-text h1 {
-      font-size: 40px; font-weight: 700; letter-spacing: -.01em;
-      color: var(--lavender); line-height: 1.15;
-    }
-    .hero-text h1 span { color: var(--violet); }
-    .hero-text .tagline { color: var(--muted); margin-top: 12px; font-size: 14px; }
-    .hero-actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+    h1 em { color: var(--violet); font-style: normal; }
+    .tagline { color: var(--muted); margin-top: 14px; font-size: 14px; line-height: 1.7; }
+    .actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
 
     /* ── buttons ── */
     .btn {
       display: inline-block; text-decoration: none;
-      padding: 10px 22px; border-radius: 5px;
-      font-family: inherit; font-size: 14px; font-weight: 600;
-      cursor: pointer; transition: opacity .15s, box-shadow .15s;
-      border: none;
+      padding: 9px 20px; border-radius: 5px;
+      font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: .01em;
+      transition: opacity .15s, box-shadow .2s; border: none; cursor: pointer;
     }
-    .btn:hover { opacity: .85; }
-    .btn-primary {
-      background: var(--violet); color: #fff;
-      box-shadow: 0 0 20px rgba(123,94,248,.25);
-    }
-    .btn-primary:hover { box-shadow: 0 0 28px rgba(123,94,248,.45); }
-    .btn-outline { background: transparent; color: var(--lavender); border: 1px solid var(--violet); }
-    .btn-nest  { background: var(--teal); color: #fff; box-shadow: 0 0 20px rgba(13,148,136,.25); }
-    .btn-nest:hover { box-shadow: 0 0 28px rgba(13,148,136,.45); }
-    .btn-nest-out { background: transparent; color: var(--teal-l); border: 1px solid var(--teal); }
+    .btn:hover { opacity: .82; }
+    .btn-v  { background: var(--violet); color: #fff; box-shadow: 0 0 18px rgba(123,94,248,.2); }
+    .btn-v:hover  { box-shadow: 0 0 26px rgba(123,94,248,.45); }
+    .btn-vo { background: transparent; color: var(--lavender); border: 1px solid rgba(123,94,248,.5); }
+    .btn-t  { background: var(--teal);  color: #fff; box-shadow: 0 0 18px rgba(13,148,136,.2); }
+    .btn-t:hover  { box-shadow: 0 0 26px rgba(13,148,136,.45); }
+    .btn-to { background: transparent; color: var(--teal-l); border: 1px solid rgba(13,148,136,.5); }
 
-    /* ── terminal block ── */
+    /* ── terminal ── */
     .term {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 20px 24px;
-      margin-top: 28px;
-      position: relative;
-      overflow-x: auto;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 20px 24px; position: relative; overflow-x: auto;
     }
-    .term-dots { display: flex; gap: 6px; margin-bottom: 14px; }
-    .term-dots span { width: 10px; height: 10px; border-radius: 50%; background: var(--dim); }
-    .term code { font-size: 14px; white-space: pre; display: block; }
-    .prompt   { color: var(--violet); }
-    .prompt-t { color: var(--teal-l); }
-    .t-dim    { color: var(--muted); }
-    .t-ok     { color: var(--green); }
-    .t-hi     { color: var(--lavender); font-weight: 700; }
-    .t-hi-t   { color: var(--teal-l); font-weight: 700; }
-    .cursor   { display: inline-block; width: 8px; background: var(--lavender); animation: blink .9s step-end infinite; vertical-align: text-bottom; }
-    .cursor-t { display: inline-block; width: 8px; background: var(--teal-l);   animation: blink .9s step-end infinite; vertical-align: text-bottom; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-    /* copy btn */
+    .term-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+    .term-bar span { width: 10px; height: 10px; border-radius: 50%; background: var(--border); }
+    .term code { font-size: 13px; white-space: pre; display: block; line-height: 1.65; }
+    .tv  { color: var(--violet); }
+    .tll { color: var(--lavender); font-weight: 700; }
+    .ttl { color: var(--teal-l);   font-weight: 700; }
+    .tt  { color: var(--teal); }
+    .td  { color: var(--muted); }
+    .tg  { color: var(--green); }
     .copy-btn {
       position: absolute; top: 14px; right: 14px;
       background: var(--bg3); border: 1px solid var(--border);
       color: var(--muted); font-family: inherit; font-size: 12px;
-      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      padding: 3px 9px; border-radius: 4px; cursor: pointer;
       transition: color .15s, border-color .15s;
     }
     .copy-btn:hover { color: var(--white); border-color: var(--violet); }
-    .copy-btn.nest:hover { border-color: var(--teal); }
 
-    /* ── features ── */
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px; margin-top: 36px;
+    /* ─────────────────────────────────────
+       CONNECTION DIAGRAM
+    ───────────────────────────────────────*/
+    .conn-section { padding: 72px 0; }
+    .conn-wrap {
+      display: flex; align-items: center; gap: 0;
+      justify-content: center;
     }
-    .feat {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 20px 22px;
-      transition: border-color .2s;
-    }
-    .feat:hover { border-color: var(--violet); }
-    .feat.nest:hover { border-color: var(--teal); }
-    .feat .icon { font-size: 17px; margin-bottom: 8px; }
-    .feat h3 { font-size: 14px; color: var(--lavender); margin-bottom: 4px; }
-    .feat.nest h3 { color: var(--teal-l); }
-    .feat p { font-size: 13px; color: var(--muted); line-height: 1.55; }
 
-    /* ── headings ── */
-    .section-label {
+    /* nodes */
+    .conn-node {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      min-width: 160px;
+    }
+    .conn-node-box {
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px 20px; background: var(--bg2);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      width: 160px;
+    }
+    .conn-node-box.v { border-color: rgba(123,94,248,.4); }
+    .conn-node-box.t { border-color: rgba(13,148,136,.4); }
+    .conn-node-name { font-size: 13px; font-weight: 700; }
+    .conn-node-name.v { color: var(--lavender); }
+    .conn-node-name.t { color: var(--teal-l); }
+    .conn-node-sub { font-size: 11px; color: var(--dim); letter-spacing: .04em; margin-top: 2px; }
+
+    /* pipe */
+    .conn-pipe {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 6px; padding: 0 8px; min-width: 200px; max-width: 320px;
+      position: relative;
+    }
+    .conn-label-top { font-size: 11px; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+    .conn-track {
+      width: 100%; height: 20px; position: relative; overflow: hidden;
+      display: flex; align-items: center;
+    }
+    .conn-line-bg {
+      position: absolute; top: 50%; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, rgba(123,94,248,.3), rgba(13,148,136,.3));
+      transform: translateY(-50%);
+    }
+    /* animated packets */
+    .pkt {
+      position: absolute; width: 6px; height: 6px; border-radius: 50%;
+      top: 50%; transform: translateY(-50%);
+      animation: pkt-move 2.4s linear infinite;
+    }
+    .pkt.v { background: var(--lavender); box-shadow: 0 0 6px var(--lavender); }
+    .pkt.t { background: var(--teal-l);   box-shadow: 0 0 6px var(--teal-l); animation-direction: reverse; }
+    .pkt:nth-child(2) { animation-delay: -.8s; }
+    .pkt:nth-child(3) { animation-delay: -1.6s; }
+    @keyframes pkt-move {
+      from { left: -6px; opacity: 0; }
+      5%   { opacity: 1; }
+      95%  { opacity: 1; }
+      to   { left: calc(100% + 6px); opacity: 0; }
+    }
+    .conn-label-bot { font-size: 11px; color: var(--dim); }
+
+    /* ── section headings ── */
+    .s-label {
       font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
       color: var(--muted); margin-bottom: 8px;
     }
-    h2 { font-size: 26px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; margin-bottom: 12px; }
-    .desc { color: var(--muted); font-size: 14px; max-width: 560px; line-height: 1.7; }
+    h2 { font-size: 26px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; margin-bottom: 14px; }
+    h2.t { color: var(--teal-l); }
+    .desc { color: var(--muted); font-size: 14px; max-width: 580px; line-height: 1.75; }
 
-    /* ── nest section ── */
-    .nest-section { background: linear-gradient(180deg, var(--bg) 0%, #091714 100%); }
-    .nest-hero { display: flex; align-items: center; gap: 44px; flex-wrap: wrap; margin-bottom: 44px; }
-    .intro-badge {
-      display: inline-block;
-      font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--teal); border: 1px solid var(--teal);
-      border-radius: 4px; padding: 3px 8px; margin-bottom: 10px;
-      animation: badge-glow 2.5s ease-in-out infinite;
+    /* ── feature rows ── */
+    .feats { display: flex; flex-direction: column; gap: 0; margin-top: 40px; }
+    .feat-row {
+      display: flex; gap: 28px; align-items: flex-start;
+      padding: 22px 0; border-bottom: 1px solid var(--border);
     }
-    @keyframes badge-glow {
-      0%,100% { box-shadow: 0 0 0 0 rgba(13,148,136,0); }
-      50%      { box-shadow: 0 0 12px 1px rgba(13,148,136,.4); }
+    .feat-row:last-child { border-bottom: none; }
+    .feat-icon {
+      font-size: 12px; letter-spacing: .02em;
+      color: var(--lavender); min-width: 68px;
+      border: 1px solid rgba(123,94,248,.3); border-radius: 4px;
+      padding: 3px 6px; text-align: center; flex-shrink: 0;
+      margin-top: 2px;
     }
-    .nest-hero h2 { color: var(--teal-l); }
-
-    /* ── steps ── */
-    .steps { margin-top: 32px; display: flex; flex-direction: column; }
-    .step {
-      display: flex; gap: 20px; align-items: flex-start;
-      padding: 18px 0; border-bottom: 1px solid var(--border);
-    }
-    .step:last-child { border-bottom: none; }
-    .step-num {
-      min-width: 28px; height: 28px;
-      border: 1px solid var(--teal); border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; color: var(--teal-l); font-weight: 700; flex-shrink: 0; margin-top: 2px;
-    }
-    .step-body h4 { font-size: 14px; color: var(--white); margin-bottom: 3px; }
-    .step-body p  { font-size: 13px; color: var(--muted); }
+    .feat-icon.t { color: var(--teal-l); border-color: rgba(13,148,136,.3); }
+    .feat-body h3 { font-size: 14px; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+    .feat-body p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
 
     /* ── inline code ── */
-    code.i { background: var(--bg3); color: var(--lavender); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+    code.i { background: var(--bg3); color: var(--lavender); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
     code.i.t { color: var(--teal-l); }
+
+    /* ── steps ── */
+    .steps { margin-top: 36px; }
+    .step { display: flex; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+    .step:last-child { border-bottom: none; }
+    .step-n {
+      min-width: 26px; height: 26px; border-radius: 50%;
+      border: 1px solid var(--teal); flex-shrink: 0; margin-top: 3px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--teal-l); font-weight: 700;
+    }
+    .step h4 { font-size: 14px; color: var(--white); margin-bottom: 3px; }
+    .step p  { font-size: 13px; color: var(--muted); }
+
+    /* ── nest intro ── */
+    .nest-section { background: linear-gradient(180deg, var(--bg) 0%, #08120f 100%); }
+    .nest-top {
+      display: flex; align-items: center; gap: 48px;
+      flex-wrap: wrap; margin-bottom: 56px;
+    }
+    .nest-logo-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      flex-shrink: 0;
+    }
+    .nest-badge {
+      font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--teal); border: 1px solid var(--teal); border-radius: 3px;
+      padding: 2px 8px; margin-bottom: 8px; display: inline-block;
+    }
+    .pulse-wrap { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+    .pulse-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 0 0 rgba(134,239,172,.7);
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(134,239,172,.6); }
+      70%  { box-shadow: 0 0 0 7px rgba(134,239,172,0);  }
+      100% { box-shadow: 0 0 0 0   rgba(134,239,172,0);  }
+    }
 
     /* ── footer ── */
     footer {
-      padding: 36px 24px; color: var(--dim); font-size: 13px;
+      padding: 36px 32px; color: var(--dim); font-size: 13px;
       display: flex; justify-content: space-between; align-items: center;
       flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--border);
     }
@@ -257,30 +262,32 @@
     footer a:hover { color: var(--white); }
 
     .mt6 { margin-top: 24px; }
-    .mt8 { margin-top: 32px; }
-    .teal-c { color: var(--teal-l); }
+    .mt8 { margin-top: 36px; }
 
-    /* scanline subtle overlay */
+    /* scanline */
     body::after {
       content: '';
-      position: fixed; inset: 0; pointer-events: none; z-index: 100;
-      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.03) 2px, rgba(0,0,0,.03) 4px);
+      position: fixed; inset: 0; pointer-events: none; z-index: 999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.025) 2px, rgba(0,0,0,.025) 4px);
     }
 
-    @media (max-width: 540px) {
-      .hero-text h1 { font-size: 28px; }
+    @media (max-width: 600px) {
+      h1 { font-size: 30px; }
       nav .ver-badge { display: none; }
+      .conn-wrap { flex-direction: column; }
+      .conn-pipe { transform: rotate(90deg); min-width: 80px; }
     }
   </style>
 </head>
 <body>
 
+<!-- nav -->
 <nav>
-  <span class="logo">zipp</span>
+  <span class="nav-logo">zipp</span>
   <a href="#nest">zipp-nest</a>
   <a href="#install">install</a>
   <a href="https://github.com/Inspiractus01/zipp" target="_blank">github</a>
-  <span class="spacer"></span>
+  <span class="nav-spacer"></span>
   <span class="ver-badge" id="nav-ver">v···</span>
 </nav>
 
@@ -288,138 +295,272 @@
 
 <!-- ── hero ── -->
 <section class="hero">
-  <div class="hero-inner">
-    <div>
-      <pre class="ascii-fly" id="fly-ascii">  )()(
- ( <span class="dots">●●</span> )
+  <div class="hero-top">
+    <pre class="ascii-fly" id="fly-ascii">  )()(
+ ( <span class="fly-dots">●●</span> )
   \──/
   /||\</pre>
-    </div>
-    <div class="hero-text">
-      <h1><span>zipp</span><br>simple, fast backups.</h1>
+    <div>
+      <h1><em>zipp</em><br>simple, fast backups.</h1>
       <p class="tagline">Snapshots. Scheduling. Restore.<br>A terminal app that stays out of your way.</p>
-      <div class="hero-actions">
-        <a href="#install" class="btn btn-primary">Get started</a>
-        <a href="https://github.com/Inspiractus01/zipp" target="_blank" class="btn btn-outline">GitHub ↗</a>
+      <div class="actions">
+        <a href="#install" class="btn btn-v">Get started</a>
+        <a href="https://github.com/Inspiractus01/zipp" target="_blank" class="btn btn-vo">GitHub ↗</a>
       </div>
     </div>
   </div>
 
-  <!-- terminal preview -->
   <div class="term">
-    <div class="term-dots"><span></span><span></span><span></span></div>
-    <code id="hero-term"></code>
-  </div>
-</section>
+    <div class="term-bar"><span></span><span></span><span></span></div>
+    <code><span class="td">  )()( </span>
+<span class="td"> ( ●● )  </span><span class="tll">zipp</span> <span class="td" id="hero-ver">v···</span>
+<span class="td">  \──/</span>
+<span class="td">  /||\</span>
 
-<!-- ── features ── -->
-<section>
-  <p class="section-label">what you get</p>
-  <h2>Everything you need.<br>Nothing you don't.</h2>
-  <p class="desc">Runs entirely on your machine. No cloud accounts, no subscriptions, no background services you didn't ask for.</p>
-  <div class="features">
-    <div class="feat"><div class="icon">📸</div><h3>Snapshots</h3><p>Every backup creates a timestamped snapshot. Keep as many as you want, auto-prune the rest.</p></div>
-    <div class="feat"><div class="icon">⏱</div><h3>Scheduled</h3><p>Set an interval per job. zipp installs a launchd / systemd timer — no cron wrangling.</p></div>
-    <div class="feat"><div class="icon">🗜</div><h3>Compressed</h3><p>Toggle <code class="i">[zip]</code> mode per job to store archives. Saves significant disk space.</p></div>
-    <div class="feat"><div class="icon">↩</div><h3>One-click restore</h3><p>Browse snapshots and restore directly from the TUI. No extra tools needed.</p></div>
-    <div class="feat"><div class="icon">📡</div><h3>Remote ready</h3><p>Pair with zipp-nest to push backups over Tailscale to any machine you control.</p></div>
-    <div class="feat"><div class="icon">🖥</div><h3>macOS &amp; Linux</h3><p>Single binary, installs in seconds. Works on your laptop and your server.</p></div>
+<span class="tll">  ▸   Jobs</span><span class="td">              4 total</span>
+<span class="td">      Run all</span>
+<span class="td">      Add job</span>
+<span class="td">      Setup</span>
+<span class="td">      Nest             </span><span class="tg">✓ connected</span>
+<span class="td">      Quit</span>
+
+<span class="tg">  ✓ scheduler active</span><span class="td"> via launchd</span>
+
+<span class="td">  ↑↓ navigate · enter select · q quit</span></code>
   </div>
 </section>
 
 <!-- ── install ── -->
 <section id="install">
-  <p class="section-label">installation</p>
+  <p class="s-label">installation</p>
   <h2>One line install.</h2>
-  <p class="desc">Downloads a prebuilt binary for your OS and architecture, places it in <code class="i">/usr/local/bin</code>.</p>
+  <p class="desc">Prebuilt binary for macOS and Linux. Drops into <code class="i">/usr/local/bin</code>, no dependencies.</p>
   <div class="term mt6">
-    <div class="term-dots"><span></span><span></span><span></span></div>
-    <button class="copy-btn" onclick="copy(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash')">copy</button>
-    <code><span class="prompt">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash
+    <div class="term-bar"><span></span><span></span><span></span></div>
+    <button class="copy-btn" onclick="cpbtn(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash')">copy</button>
+    <code><span class="tv">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash
 
-<span class="t-ok">  ✓ zipp <span id="install-ver">v···</span> installed</span>
-<span class="t-dim">  run: zipp</span></code>
+<span class="tg">  ✓ zipp <span id="install-ver">v···</span> installed</span>
+<span class="td">  run: zipp</span></code>
+  </div>
+</section>
+
+<!-- ── features ── -->
+<section>
+  <p class="s-label">features</p>
+  <h2>Everything you need.<br>Nothing you don't.</h2>
+  <p class="desc">No cloud accounts. No subscriptions. Runs entirely on your machine with a scheduler that installs itself.</p>
+
+  <div class="feats">
+    <div class="feat-row">
+      <div class="feat-icon">snap</div>
+      <div class="feat-body">
+        <h3>Timestamped snapshots</h3>
+        <p>Every run creates a new snapshot. Set how many to keep — old ones are pruned automatically. Browse and restore any of them from the TUI.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon">sched</div>
+      <div class="feat-body">
+        <h3>Per-job scheduling</h3>
+        <p>Set an interval in hours per job. zipp registers a launchd agent (macOS) or systemd timer (Linux) — runs in the background, no cron needed.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon">.gz</div>
+      <div class="feat-body">
+        <h3>Compressed or folder mode</h3>
+        <p>Toggle <code class="i">[zip]</code> per job to store <code class="i">.tar.gz</code> archives instead of rsync folders. Significant space savings for large directories.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon">mode</div>
+      <div class="feat-body">
+        <h3>Three backup modes</h3>
+        <p>Press <code class="i">n</code> on any job to cycle: <code class="i">[local]</code> keeps backups on this machine only, <code class="i">[nest]</code> sends to the remote server only, <code class="i">[nest+local]</code> does both.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon">rest</div>
+      <div class="feat-body">
+        <h3>One-key restore</h3>
+        <p>Press <code class="i">r</code> on any job to see its snapshots. Select one, confirm — files are restored to the original source path.</p>
+      </div>
+    </div>
   </div>
 </section>
 
 </div><!-- /wrap -->
 
+<!-- ─────────────────────────────────────────
+     CONNECTION DIAGRAM
+───────────────────────────────────────────-->
+<section class="conn-section" style="border-top:1px solid var(--border)">
+<div class="wrap">
+  <p class="s-label" style="text-align:center;margin-bottom:40px">how zipp-nest works</p>
+
+  <div class="conn-wrap">
+
+    <!-- zipp node -->
+    <div class="conn-node">
+      <div class="conn-node-box v">
+        <pre class="ascii-fly" style="font-size:13px;text-shadow:none">  )()(
+ ( <span class="fly-dots">●●</span> )
+  \──/
+  /||\</pre>
+        <div class="conn-node-name v">zipp</div>
+      </div>
+      <div class="conn-node-sub">your laptop / desktop</div>
+    </div>
+
+    <!-- pipe -->
+    <div class="conn-pipe">
+      <div class="conn-label-top">tailscale · encrypted</div>
+      <div class="conn-track">
+        <div class="conn-line-bg"></div>
+        <div class="pkt v"></div>
+        <div class="pkt v"></div>
+        <div class="pkt v"></div>
+      </div>
+      <div class="conn-track" style="margin-top:2px">
+        <div class="conn-line-bg" style="background:linear-gradient(90deg,rgba(13,148,136,.3),rgba(123,94,248,.3))"></div>
+        <div class="pkt t"></div>
+        <div class="pkt t"></div>
+        <div class="pkt t"></div>
+      </div>
+      <div class="conn-label-bot">over the internet</div>
+    </div>
+
+    <!-- nest node -->
+    <div class="conn-node">
+      <div class="conn-node-box t">
+        <pre class="ascii-nest" style="font-size:13px;text-shadow:none">  ,~~~~~,
+ (~<span class="nest-accent">~~~~~</span>~)
+  `~~~~~`</pre>
+        <div class="conn-node-name t">zipp-nest</div>
+      </div>
+      <div class="conn-node-sub">your server / NAS / VPS</div>
+    </div>
+
+  </div>
+
+  <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:32px;max-width:480px;margin-left:auto;margin-right:auto">
+    backups travel over your private Tailscale network. encrypted end-to-end. nothing touches a third-party server.
+  </p>
+</div>
+</section>
+
 <!-- ── nest section ── -->
 <section class="nest-section" id="nest">
 <div class="wrap">
 
-  <div class="nest-hero">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
-      <div class="nest-wrap">
-        <div class="orbit-ring"><div class="orbit-dot"></div></div>
-        <pre class="ascii-nest"><span>  ,~~~~~,</span>
-<span> (~</span><span class="accent">~~~~~</span><span>~)</span>
-<span>  `~~~~~`</span></pre>
-      </div>
-      <div class="connected-badge">
+  <div class="nest-top">
+    <div class="nest-logo-wrap">
+      <pre class="ascii-nest">  ,~~~~~,
+ (~<span class="nest-accent">~~~~~</span>~)
+  `~~~~~`</pre>
+      <div class="pulse-wrap">
         <div class="pulse-dot"></div>
         self-hosted
       </div>
     </div>
 
     <div>
-      <span class="intro-badge">introducing</span>
-      <h2 class="teal-c">zipp-nest</h2>
-      <p class="desc">Your backups, over the internet.<br>
-      A self-hosted backup server that receives uploads from zipp and stores them on any machine you control.</p>
-      <div class="hero-actions mt6">
-        <a href="#nest-install" class="btn btn-nest">Install on server</a>
-        <a href="https://github.com/Inspiractus01/zipp-nest" target="_blank" class="btn btn-nest-out">GitHub ↗</a>
+      <span class="nest-badge">introducing</span>
+      <h2 class="t">zipp-nest</h2>
+      <p class="desc">
+        A self-hosted backup server that pairs with zipp.<br>
+        Install it on any machine — your home server, a VPS, a Raspberry Pi.<br>
+        Connect over Tailscale. Your data stays yours.
+      </p>
+      <div class="actions mt6">
+        <a href="#nest-install" class="btn btn-t">Install on server</a>
+        <a href="https://github.com/Inspiractus01/zipp-nest" target="_blank" class="btn btn-to">GitHub ↗</a>
       </div>
     </div>
   </div>
 
   <!-- nest features -->
-  <div class="features">
-    <div class="feat nest"><div class="icon">🔒</div><h3>Private by design</h3><p>Runs over <a href="https://tailscale.com" target="_blank" style="color:var(--teal-l);text-decoration:none">Tailscale</a> — your backups never touch a third-party server. Your network, your rules.</p></div>
-    <div class="feat nest"><div class="icon">🗂</div><h3>Per-job storage</h3><p>Each job gets its own folder. Browse the full upload history from the built-in Logs page.</p></div>
-    <div class="feat nest"><div class="icon">✂</div><h3>Auto-prune</h3><p>After each upload, old snapshots are removed on the server to match your local <code class="i t">max snapshots</code> setting.</p></div>
-    <div class="feat nest"><div class="icon">⚙</div><h3>Configurable</h3><p>Set storage path and port from the TUI. Changes apply immediately — the server restarts automatically.</p></div>
-    <div class="feat nest"><div class="icon">🔄</div><h3>Three backup modes</h3><p>Per job: <code class="i t">[local]</code> only, <code class="i t">[nest]</code> only (saves local disk), or <code class="i t">[nest+local]</code> for both.</p></div>
-    <div class="feat nest"><div class="icon">📋</div><h3>Built-in logs</h3><p>Every upload is logged with timestamp and size. View the full history without leaving the terminal.</p></div>
+  <p class="s-label">what you get</p>
+  <div class="feats">
+    <div class="feat-row">
+      <div class="feat-icon t">priv</div>
+      <div class="feat-body">
+        <h3>Private by design</h3>
+        <p>Connects over <a href="https://tailscale.com" target="_blank" style="color:var(--teal-l);text-decoration:none">Tailscale</a> — a private encrypted network you control. No open ports, no S3 bucket, no third-party storage. Just two machines talking to each other.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon t">logs</div>
+      <div class="feat-body">
+        <h3>Built-in logs</h3>
+        <p>Every upload is written to <code class="i t">~/.zipp-nest/server.log</code> with timestamp, job name and size. View the full history from the TUI Logs page without leaving the terminal.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon t">prune</div>
+      <div class="feat-body">
+        <h3>Server-side auto-prune</h3>
+        <p>After each upload zipp sends a prune request to the server. Old snapshots are deleted to match your <code class="i t">max snapshots</code> setting — no manual cleanup needed on either side.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon t">cfg</div>
+      <div class="feat-body">
+        <h3>Configurable via TUI</h3>
+        <p>Change the storage path or port from the Settings page. If the server is running it restarts automatically — no config files to edit by hand.</p>
+      </div>
+    </div>
   </div>
 
   <!-- how it works -->
   <div class="mt8">
-    <p class="section-label">how it works</p>
-    <h2 class="teal-c">Simple setup, no config files.</h2>
+    <p class="s-label">setup</p>
+    <h2 class="t">Four steps to remote backups.</h2>
     <div class="steps">
-      <div class="step"><div class="step-num">1</div><div class="step-body"><h4>Install zipp on your client machine</h4><p>One curl command, binary drops into <code class="i">/usr/local/bin</code>.</p></div></div>
-      <div class="step"><div class="step-num">2</div><div class="step-body"><h4>Install zipp-nest on your server</h4><p>Same process. Open the TUI, press <strong style="color:var(--teal-l)">Start server</strong> — registers as a background service automatically.</p></div></div>
-      <div class="step"><div class="step-num">3</div><div class="step-body"><h4>Connect with Tailscale</h4><p>Enable Tailscale on both machines. zipp-nest shows a short code — paste it into zipp on the client.</p></div></div>
-      <div class="step"><div class="step-num">4</div><div class="step-body"><h4>Set mode and run</h4><p>Press <code class="i t">n</code> on any job to cycle <code class="i t">[local]</code> → <code class="i t">[nest]</code> → <code class="i t">[nest+local]</code>. Done.</p></div></div>
+      <div class="step"><div class="step-n">1</div><div><h4>Install zipp on your client machine</h4><p>One curl command. Binary in <code class="i">/usr/local/bin</code>, scheduler registered automatically.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><h4>Install zipp-nest on your server</h4><p>Same process. Open the TUI, press <strong style="color:var(--teal-l)">Start server</strong> — it registers as a background service.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><h4>Connect with Tailscale</h4><p>Enable Tailscale on both machines. zipp-nest shows a short connection code — paste it into zipp on the Nest page.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><h4>Set mode and run</h4><p>Press <code class="i t">n</code> on any job to pick <code class="i t">[local]</code>, <code class="i t">[nest]</code>, or <code class="i t">[nest+local]</code>. Backups go where you want them.</p></div></div>
     </div>
   </div>
 
-  <!-- nest terminal preview -->
+  <!-- nest terminal -->
   <div class="term mt8">
-    <div class="term-dots"><span></span><span></span><span></span></div>
-    <code id="nest-term"></code>
+    <div class="term-bar"><span></span><span></span><span></span></div>
+    <code><span class="tt">  ,~~~~~,</span>
+<span class="tt"> (~</span><span class="ttl">~~~~~</span><span class="tt">~)  </span><span class="ttl">zipp-nest</span> <span class="td" id="nest-ver">v···</span>
+<span class="tt">  `~~~~~`</span>
+
+<span class="tg">  ● running</span><span class="td">     (launchd)</span>
+<span class="tg">  ● connected</span><span class="td">   100.64.0.2</span>
+
+<span class="ttl">  ↑  minecraft   </span><span class="td">2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)</span>
+<span class="ttl">  ↑  terraria    </span><span class="td">2026-03-11 11:05  snapshot.tar.gz  ( 8.1 MB)</span>
+<span class="ttl">  ↑  dayzserver  </span><span class="td">2026-03-10 22:14  snapshot.tar.gz  (31.7 MB)</span>
+
+<span class="td">  ↑↓ navigate · enter select · q quit</span></code>
   </div>
 
   <!-- nest install -->
   <div class="mt8" id="nest-install">
-    <p class="section-label">installation</p>
-    <h2 class="teal-c">Install on your server.</h2>
+    <p class="s-label">installation</p>
+    <h2 class="t">Install on your server.</h2>
+    <p class="desc" style="margin-bottom:0">Same one-liner. Works on Linux (systemd) and macOS (launchd).</p>
     <div class="term mt6">
-      <div class="term-dots"><span></span><span></span><span></span></div>
-      <button class="copy-btn nest" onclick="copy(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash')">copy</button>
-      <code><span class="prompt-t">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash
+      <div class="term-bar"><span></span><span></span><span></span></div>
+      <button class="copy-btn" onclick="cpbtn(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash')">copy</button>
+      <code><span class="ttl">$</span> curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp-nest/main/install.sh | bash
 
-<span class="t-ok">  ✓ zipp-nest <span id="nest-install-ver">v···</span> installed</span>
-<span class="t-dim">  run: zipp-nest</span></code>
+<span class="tg">  ✓ zipp-nest <span id="nest-install-ver">v···</span> installed</span>
+<span class="td">  run: zipp-nest</span></code>
     </div>
   </div>
 
 </div>
 </section>
 
-<!-- ── footer ── -->
+<!-- footer -->
 <footer>
   <div>
     <span style="color:var(--lavender);font-weight:700">zipp</span>
@@ -433,89 +574,40 @@
 </footer>
 
 <script>
-/* ── versions from GitHub ── */
+/* versions from GitHub */
 async function fetchVer(repo) {
   try {
     const r = await fetch(`https://api.github.com/repos/Inspiractus01/${repo}/releases/latest`);
     const d = await r.json();
-    return d.tag_name || '···';
-  } catch { return '···'; }
+    return d.tag_name || 'v···';
+  } catch { return 'v···'; }
 }
 (async () => {
   const [zv, nv] = await Promise.all([fetchVer('zipp'), fetchVer('zipp-nest')]);
-  document.getElementById('nav-ver').textContent      = zv;
-  document.getElementById('install-ver').textContent  = zv;
-  document.getElementById('nest-install-ver').textContent = nv;
+  ['nav-ver','hero-ver','install-ver'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = zv;
+  });
+  ['nest-ver','nest-install-ver'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = nv;
+  });
 })();
 
-/* ── fly wing animation ── */
+/* fly wing animation */
 const wingFrames = ['  )()(', '  /\\/\\', '  ~~~~', '  \\/\\/'];
 let wingIdx = 0;
-const flyEl = document.getElementById('fly-ascii');
-const flyLines = [null, ' ( <span class="dots">●●</span> )', '  \\──/', '  /||\\'];
-setInterval(() => {
-  wingIdx = (wingIdx + 1) % wingFrames.length;
-  flyLines[0] = wingFrames[wingIdx];
-  flyEl.innerHTML = flyLines.join('\n');
-}, 220);
+document.querySelectorAll('#fly-ascii, .conn-node .ascii-fly').forEach(el => {
+  const base = [null, ' ( <span class="fly-dots">●●</span> )', '  \\──/', '  /||\\'];
+  setInterval(() => {
+    wingIdx = (wingIdx + 1) % wingFrames.length;
+    base[0] = wingFrames[wingIdx];
+    el.innerHTML = base.join('\n');
+  }, 220);
+});
 
-/* ── typing effect ── */
-function typeLines(elId, lines, speed = 28) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  let full = '';
-  let li = 0, ci = 0;
-  const raw = lines.map(l => l.raw);
-  const html = lines.map(l => l.html || l.raw);
-
-  function tick() {
-    if (li >= raw.length) { el.innerHTML = html.join('\n'); return; }
-    if (ci < raw[li].length) {
-      ci++;
-      // render all complete lines as html, current as plain slice
-      const done = html.slice(0, li).join('\n');
-      const cur  = raw[li].slice(0, ci);
-      const rest = raw.slice(li + 1).map(() => '').join('\n');
-      el.innerHTML = (done ? done + '\n' : '') + cur + '<span class="cursor"> </span>';
-      setTimeout(tick, speed + Math.random() * 20);
-    } else {
-      li++; ci = 0;
-      setTimeout(tick, li < raw.length ? 120 : 0);
-    }
-  }
-  // start after a small delay
-  setTimeout(tick, 600);
-}
-
-// hero terminal
-typeLines('hero-term', [
-  { raw: '  )()( ',         html: '<span class="t-dim">  )()( </span>' },
-  { raw: ' ( ●● )  zipp v1.2.29', html: '<span class="t-dim"> ( ●● )  </span><span class="t-hi">zipp</span> <span class="t-dim">v1.2.29</span>' },
-  { raw: '  \\──/   Jobs',  html: '<span class="t-dim">  \\──/   Jobs</span>' },
-  { raw: '',                html: '' },
-  { raw: '  ▸ ✓  Documents backup [zip]  [nest+local]  in 1h', html: '<span style="color:var(--green)">  ▸ ✓  Documents backup [zip]  [nest+local]  in 1h</span>' },
-  { raw: '    ✓  Photos             [zip]  [local]      in 3h', html: '<span class="t-dim">    ✓  Photos             [zip]  [local]      in 3h</span>' },
-  { raw: '    ✓  dotfiles                  [nest]       manual', html: '<span class="t-dim">    ✓  dotfiles                  [nest]       manual</span>' },
-  { raw: '',                html: '' },
-  { raw: '  ↑↓ navigate · enter run · e edit · d delete', html: '<span class="t-dim">  ↑↓ navigate · enter run · e edit · d delete</span>' },
-  { raw: '  r restore  · t on/off  · n mode  · esc back', html: '<span class="t-dim">  r restore  · t on/off  · n mode  · esc back</span>' },
-]);
-
-// nest terminal
-typeLines('nest-term', [
-  { raw: '  ,~~~~~,',         html: '<span style="color:var(--teal)">  ,~~~~~,</span>' },
-  { raw: ' (~~~~~~~)  zipp-nest v0.5.15', html: '<span style="color:var(--teal)"> (~</span><span style="color:var(--teal-l);font-weight:700">~~~~~</span><span style="color:var(--teal)">~)  </span><span class="t-hi-t">zipp-nest</span> <span class="t-dim">v0.5.15</span>' },
-  { raw: "  `~~~~~`",         html: '<span style="color:var(--teal)">  `~~~~~`</span>' },
-  { raw: '',                  html: '' },
-  { raw: '  ● running    (launchd)', html: '<span style="color:var(--green)">  ● running</span><span class="t-dim">    (launchd)</span>' },
-  { raw: '  ● connected  100.64.0.2', html: '<span style="color:var(--green)">  ● connected</span><span class="t-dim">  100.64.0.2</span>' },
-  { raw: '',                  html: '' },
-  { raw: '  ↑  minecraft    2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)', html: '<span style="color:var(--teal-l)">  ↑  minecraft</span><span class="t-dim">    2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)</span>' },
-  { raw: '  ↑  terraria     2026-03-11 11:05  snapshot.tar.gz  (8.1 MB)', html:  '<span style="color:var(--teal-l)">  ↑  terraria</span><span class="t-dim">     2026-03-11 11:05  snapshot.tar.gz  (8.1 MB)</span>' },
-], 22);
-
-/* ── copy button ── */
-function copy(btn, text) {
+/* copy button */
+function cpbtn(btn, text) {
   navigator.clipboard.writeText(text).then(() => {
     const o = btn.textContent;
     btn.textContent = 'copied!';
