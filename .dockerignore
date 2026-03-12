@@ -1,0 +1,14 @@
+# Git + GitHub metadata
+.git
+.github
+
+# Go sources and build artifacts (not needed for static site)
+*.go
+go.mod
+go.sum
+
+# Misc project files
+README.md
+install.sh
+*.md
+.DS_Store
