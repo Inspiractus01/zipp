@@ -117,7 +117,7 @@ type model struct {
 	nestInputMode  bool
 }
 
-var menuItemsBase = []string{"Jobs", "Run all", "Add job", "Setup", "Nest", "Quit"}
+var menuItemsBase = []string{"Jobs", "Run all", "Setup", "Nest", "Quit"}
 
 func (m model) getMenuItems() []string {
 	if m.updateInfo.hasUpdate {
@@ -372,10 +372,6 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "Jobs":
 			m.page = pageJobs
 			m.cursor = 0
-		case "Add job":
-			m.page = pageAdd
-			m.formStep = 0
-			m.formInputs = newFormInputs()
 		case "Run all":
 			m.page = pageRun
 			m.runOutput = nil
@@ -467,7 +463,6 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			job := m.config.Jobs[m.cursor]
 			snaps, err := listSnapshots(job)
 			if err != nil || len(snaps) == 0 {
-				// nothing to restore yet
 				break
 			}
 			m.restoreJob = job
@@ -475,6 +470,10 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.restoreCursor = 0
 			m.page = pageRestore
 		}
+	case "c":
+		m.page = pageAdd
+		m.formStep = 0
+		m.formInputs = newFormInputs()
 	}
 	return m, nil
 }
@@ -567,9 +566,6 @@ func (m model) buildJob() *Job {
 	}
 
 	dest := strings.TrimSpace(m.formInputs[2].Value())
-	if dest == "" {
-		return nil
-	}
 
 	interval := 0
 	fmt.Sscanf(m.formInputs[3].Value(), "%d", &interval)
@@ -751,7 +747,7 @@ func (m model) viewJobs() string {
 	b.WriteString("\n")
 
 	if len(m.config.Jobs) == 0 {
-		b.WriteString(styleDim.Render("  no jobs yet — press esc and add one\n"))
+		b.WriteString(styleDim.Render("  no jobs yet") + "\n")
 	} else {
 		for i, job := range m.config.Jobs {
 			selected := i == m.cursor
@@ -791,6 +787,16 @@ func (m model) viewJobs() string {
 
 			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+nameStr, next)
 			b.WriteString(lipgloss.NewStyle().Width(60).Render(line) + "\n")
+
+			// destination warnings
+			if job.Destination == "" {
+				switch job.mode() {
+				case "local":
+					b.WriteString("     " + styleError.Render("⚠ destination not set") + "\n")
+				case "both":
+					b.WriteString("     " + styleWarning.Render("⚠ backup works only on nest") + "\n")
+				}
+			}
 		}
 	}
 
@@ -805,8 +811,9 @@ func (m model) viewJobs() string {
 		keyHint("r", "restore", colorViolet),
 		keyHint("t", "on/off", colorFuchsia),
 		keyHint("n", "mode", colorGreen),
-		keyHint("esc", "back", colorMuted),
+		keyHint("c", "create new", colorOrange),
 	}, sep))
+	b.WriteString("\n  " + keyHint("esc", "back", colorMuted))
 	return b.String()
 }
 

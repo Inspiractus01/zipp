@@ -17,6 +17,7 @@ var (
 	colorGreen    = lipgloss.Color("#86efac")
 	colorRed      = lipgloss.Color("#f87171")
 	colorYellow   = lipgloss.Color("#fbbf24")
+	colorOrange   = lipgloss.Color("#fb923c")
 
 	styleSelected = lipgloss.NewStyle().
 			Foreground(colorLavender).
