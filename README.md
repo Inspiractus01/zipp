@@ -1,4 +1,4 @@
-# Zipp
+# zipp
 
 ```
   )()(
@@ -7,7 +7,7 @@
   /||\
 ```
 
-Simple backup manager with scheduling and snapshots. Add your backup jobs, set an interval, forget about it.
+Simple backup manager for your terminal. Add jobs, set a schedule, forget about it.
 
 ## Install
 
@@ -15,26 +15,27 @@ Simple backup manager with scheduling and snapshots. Add your backup jobs, set a
 curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash
 ```
 
-Auto-detects your OS and architecture (Linux/macOS, amd64/arm64).
+macOS and Linux · amd64 and arm64
 
-## Usage
+## What it does
+
+- **Snapshot backups** — every run creates a timestamped copy, old ones pruned automatically
+- **Scheduler** — installs a launchd agent (macOS) or systemd timer (Linux), runs in the background
+- **Three backup modes** — `[local]` stays on this machine, `[nest]` goes to your server, `[nest+local]` does both
+- **Live sync** — watch a folder and sync instantly on any file change
+- **One-key restore** — browse snapshots and restore from the TUI
+
+## Commands
 
 ```
-zipp              open the UI
-zipp run          run jobs that are due  (for cron/systemd)
+zipp              open the TUI
+zipp run          run jobs that are due (called by the scheduler)
+zipp watch        start live sync watchers
 zipp list         list all jobs
 ```
 
-Jobs and config are stored in `~/.zipp/config.json`.
+## Remote backups
 
-## Features
+Pair with [zipp-nest](https://github.com/Inspiractus01/zipp-nest) to back up to your own server — end-to-end encrypted, no third-party storage.
 
-- **Snapshot backups** — each run creates a timestamped copy via rsync
-- **Auto-pruning** — keeps only N most recent snapshots per job
-- **Scheduler** — sets up systemd timer (Linux) or launchd (macOS) automatically
-- **Update check** — notifies you when a new version is available
-- **Nice TUI** — animated fly, purple/blue theme
-
-## Scheduling
-
-Open `zipp` and select **Setup** — it detects your OS and installs the right scheduler automatically.
+Config: `~/.zipp/config.json`
