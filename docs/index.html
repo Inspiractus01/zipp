@@ -23,9 +23,19 @@
       --teal-l:   #5eead4;
       --green:    #86efac;
     }
-    html { scroll-behavior: smooth; }
+    html {
+      scroll-behavior: smooth;
+      background: linear-gradient(
+        to bottom,
+        #0f0b1c 0%,
+        #0d0d14 18%,
+        #0d0d14 62%,
+        #080e0c 100%
+      );
+      min-height: 100%;
+    }
     body {
-      background: var(--bg);
+      background: transparent;
       color: var(--white);
       font-family: 'Space Mono', 'Courier New', monospace;
       font-size: 15px;
@@ -376,7 +386,7 @@
   /||\</pre>
     <div>
       <h1><em>zipp</em><br>simple, fast backups.</h1>
-      <p class="tagline">Snapshots. Scheduling. Restore.<br>Works locally or sends to your own server.<br>A terminal app that stays out of your way.</p>
+      <p class="tagline">Scheduled snapshots with one-key restore.<br>Backs up locally, or sends to your own server.<br>Terminal app. No cloud. No account. No noise.</p>
       <div class="actions">
         <a href="#install" class="btn btn-v">Get started</a>
         <a href="https://github.com/Inspiractus01/zipp" target="_blank" class="btn btn-vo">GitHub ↗</a>
@@ -406,7 +416,7 @@
 <section id="install">
   <p class="s-label">installation</p>
   <h2>One line install.</h2>
-  <p class="desc">Prebuilt binary for macOS and Linux. Drops into <code class="i">/usr/local/bin</code>, no dependencies.</p>
+  <p class="desc">Prebuilt binary for macOS and Linux. Drops into <code class="i">/usr/local/bin</code>. No dependencies, no package manager.</p>
   <div class="term mt6">
     <div class="term-bar"><span></span><span></span><span></span></div>
     <button class="copy-btn" onclick="cpbtn(this,'curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash')">copy</button>
@@ -475,42 +485,42 @@
 <section>
   <p class="s-label">features</p>
   <h2>Everything you need.<br>Nothing you don't.</h2>
-  <p class="desc">No cloud accounts. No subscriptions. Runs entirely on your machine with a scheduler that installs itself.</p>
+  <p class="desc">No cloud. No account. Runs on your machine with a scheduler that registers itself on install.</p>
 
   <div class="feats">
     <div class="feat-row">
       <div class="feat-icon">snap</div>
       <div class="feat-body">
         <h3>Timestamped snapshots</h3>
-        <p>Every backup run creates a new dated snapshot — not an overwrite. You decide how many to keep, old ones are cleaned up automatically. Every version is there if you need it.</p>
+        <p>Each backup creates a new dated copy — nothing gets overwritten. Set how many snapshots to keep per job; old ones are deleted automatically when the limit is reached.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">sched</div>
       <div class="feat-body">
         <h3>Runs on a schedule, automatically</h3>
-        <p>Set a backup interval per job (e.g. every 2 hours). zipp installs a system scheduler — launchd on macOS, systemd on Linux — so it keeps running even when you close the app. No cron, no scripts.</p>
+        <p>Set an interval per job (e.g. every 2 hours). On first run zipp registers a system scheduler — launchd on macOS, systemd on Linux. Backups happen in the background whether the app is open or not.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">.gz</div>
       <div class="feat-body">
-        <h3>Compressed archives or folder copy</h3>
-        <p>Toggle compression per job. Compressed mode packs everything into a <code class="i">.tar.gz</code> — good for large game worlds or databases. Folder mode keeps files as-is — good for quick access.</p>
+        <h3>Compressed or plain folder</h3>
+        <p>Choose per job. Compressed mode creates a <code class="i">.tar.gz</code> archive — smaller, good for game worlds or databases. Plain mode copies the folder as-is — faster, easier to browse.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">mode</div>
       <div class="feat-body">
         <h3>Local, remote, or both</h3>
-        <p>Press <code class="i">n</code> on any job to switch between three modes. <code class="i">[local]</code> — backup stays on this machine. <code class="i">[nest]</code> — backup goes to your remote server only. <code class="i">[nest+local]</code> — both at once.</p>
+        <p>Press <code class="i">n</code> on any job to cycle modes: <code class="i">[local]</code> keeps the backup on this machine, <code class="i">[nest]</code> sends it to your server only, <code class="i">[nest+local]</code> does both at the same time.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">rest</div>
       <div class="feat-body">
         <h3>One-key restore</h3>
-        <p>Press <code class="i">r</code> on any job to see all its snapshots listed by date. Pick one, confirm — zipp puts the files back exactly where they came from. Done.</p>
+        <p>Press <code class="i">r</code> on any job to browse its snapshots. Pick one, confirm — zipp extracts it back to the original source path. Works for both local and remote backups.</p>
       </div>
     </div>
   </div>
@@ -606,8 +616,8 @@
       <h2 class="t">zipp-nest</h2>
       <p class="desc">
         A self-hosted backup server that pairs with zipp.<br>
-        Install it on any machine — your home server, a VPS, a Raspberry Pi.<br>
-        Backups are end-to-end encrypted. Your data never touches anyone else's server.
+        Install it on any machine — home server, VPS, Raspberry Pi, NAS.<br>
+        Backups are end-to-end encrypted. Your files go directly to your server, nowhere else.
       </p>
       <div class="actions mt6">
         <a href="#nest-install" class="btn btn-t">Install on server</a>
@@ -620,31 +630,31 @@
   <p class="s-label">what you get</p>
   <div class="feats">
     <div class="feat-row">
-      <div class="feat-icon t">priv</div>
+      <div class="feat-icon t">recv</div>
       <div class="feat-body">
-        <h3>Private by design</h3>
-        <p>Backups travel end-to-end encrypted between your machines. No open ports, no S3 bucket, no third-party storage. Works on a local network or remotely — just two machines talking directly to each other.</p>
+        <h3>Receives and stores backups</h3>
+        <p>zipp-nest listens for incoming backups from zipp. Each job gets its own folder on the server. Snapshots are stored with timestamps — exactly what zipp sent, nothing changed.</p>
+      </div>
+    </div>
+    <div class="feat-row">
+      <div class="feat-icon t">prune</div>
+      <div class="feat-body">
+        <h3>Auto-prune on the server side</h3>
+        <p>After each upload, old snapshots are pruned automatically to match the <code class="i t">max snapshots</code> limit you set in zipp. The server stays clean without any manual cleanup.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon t">logs</div>
       <div class="feat-body">
         <h3>Built-in logs</h3>
-        <p>Every upload is written to <code class="i t">~/.zipp-nest/server.log</code> with timestamp, job name and size. View the full history from the TUI Logs page without leaving the terminal.</p>
+        <p>Every received backup is logged with timestamp, job name and size. Browse the history from the TUI without leaving the terminal.</p>
       </div>
     </div>
     <div class="feat-row">
-      <div class="feat-icon t">prune</div>
+      <div class="feat-icon t">svc</div>
       <div class="feat-body">
-        <h3>Server-side auto-prune</h3>
-        <p>After each upload zipp sends a prune request to the server. Old snapshots are deleted to match your <code class="i t">max snapshots</code> setting — no manual cleanup needed on either side.</p>
-      </div>
-    </div>
-    <div class="feat-row">
-      <div class="feat-icon t">cfg</div>
-      <div class="feat-body">
-        <h3>Configurable via TUI</h3>
-        <p>Change the storage path or port from the Settings page. If the server is running it restarts automatically — no config files to edit by hand.</p>
+        <h3>Runs as a background service</h3>
+        <p>Press Start server in the TUI — it registers as launchd (macOS) or systemd (Linux) and keeps running after you close the app. No manual daemon setup.</p>
       </div>
     </div>
   </div>
@@ -654,10 +664,10 @@
     <p class="s-label">setup</p>
     <h2 class="t">Four steps to remote backups.</h2>
     <div class="steps">
-      <div class="step"><div class="step-n">1</div><div><h4>Install zipp on your client machine</h4><p>One curl command. Binary in <code class="i">/usr/local/bin</code>, scheduler registered automatically.</p></div></div>
-      <div class="step"><div class="step-n">2</div><div><h4>Install zipp-nest on your server</h4><p>Same process. Open the TUI, press <strong style="color:var(--teal-l)">Start server</strong> — it registers as a background service.</p></div></div>
-      <div class="step"><div class="step-n">3</div><div><h4>Connect to your server</h4><p>zipp-nest shows a short connection code — paste it into zipp on the Nest page. Works over local network or remotely.</p></div></div>
-      <div class="step"><div class="step-n">4</div><div><h4>Set mode and run</h4><p>Press <code class="i t">n</code> on any job to pick <code class="i t">[local]</code>, <code class="i t">[nest]</code>, or <code class="i t">[nest+local]</code>. Backups go where you want them.</p></div></div>
+      <div class="step"><div class="step-n">1</div><div><h4>Install zipp on your machine</h4><p>One curl command. Binary drops into <code class="i">/usr/local/bin</code>, scheduler registers itself.</p></div></div>
+      <div class="step"><div class="step-n">2</div><div><h4>Install zipp-nest on your server</h4><p>Same one-liner on the server. Open the TUI, press <strong style="color:var(--teal-l)">Start server</strong> — it registers as a system service and keeps running.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><h4>Paste the connection code</h4><p>zipp-nest shows a short code under Connection info. Open zipp → Nest → paste it. Both machines are now linked.</p></div></div>
+      <div class="step"><div class="step-n">4</div><div><h4>Set a job to use nest</h4><p>Press <code class="i t">n</code> on any job to switch to <code class="i t">[nest]</code> or <code class="i t">[nest+local]</code>. Next scheduled run sends the backup to your server.</p></div></div>
     </div>
   </div>
 
@@ -668,8 +678,8 @@
 <span class="tt"> (~</span><span class="ttl">~~~~~</span><span class="tt">~)  </span><span class="ttl">zipp-nest</span> <span class="td" id="nest-ver">v···</span>
 <span class="tt">  `~~~~~`</span>
 
-<span class="tg">  ● running</span><span class="td">     (launchd)</span>
-<span class="tg">  ● connected</span><span class="td">   100.64.0.2</span>
+<span class="tg">  ● running</span><span class="td">     (launchd · port 8765)</span>
+<span class="tg">  ● listening</span><span class="td">  192.168.1.42:8765</span>
 
 <span class="ttl">  ↑  minecraft-srv  </span><span class="td">2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)</span>
 <span class="ttl">  ↑  postgres       </span><span class="td">2026-03-11 13:51  snapshot.tar.gz  ( 4.1 MB)</span>
