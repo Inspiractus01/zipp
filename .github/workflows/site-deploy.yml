@@ -16,6 +16,11 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/zipp-site:latest
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+  SITE_PORT: ${{ secrets.SITE_PORT }}
 
 jobs:
   build-and-deploy:
@@ -43,16 +48,16 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}
 
       - name: Redeploy on remote Docker host
-        if: ${{ secrets.DEPLOY_HOST != '' && secrets.DEPLOY_USER != '' && secrets.DEPLOY_SSH_KEY != '' }}
+        if: ${{ env.DEPLOY_HOST != '' && env.DEPLOY_USER != '' && env.DEPLOY_SSH_KEY != '' }}
         uses: appleboy/ssh-action@v0.1.10
         env:
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          SITE_PORT: ${{ secrets.SITE_PORT }}
+          SITE_PORT: ${{ env.SITE_PORT }}
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT || '22' }}
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ env.DEPLOY_SSH_KEY }}
+          port: ${{ env.DEPLOY_PORT || '22' }}
           envs: IMAGE_NAME,SITE_PORT
           script: |
             set -e
