@@ -463,6 +463,12 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			job.NestEnabled = false // clear legacy field
 			m.config.save()
 		}
+	case "w":
+		if len(m.config.Jobs) > 0 {
+			job := m.config.Jobs[m.cursor]
+			job.WatchMode = !job.WatchMode
+			m.config.save()
+		}
 	case "r":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
@@ -756,6 +762,8 @@ func (m model) viewJobs() string {
 			var indicator string
 			if !job.Enabled {
 				indicator = styleError.Render("✗")
+			} else if job.WatchMode {
+				indicator = styleLive.Render("~")
 			} else if job.isDue() {
 				indicator = styleWarning.Render("⚡")
 			} else {
@@ -778,6 +786,9 @@ func (m model) viewJobs() string {
 				nameStr += styleSuccess.Render(" [nest]")
 			default:
 				nameStr += styleDim.Render(" [local]")
+			}
+			if job.WatchMode {
+				nameStr += styleLive.Render(" [live]")
 			}
 
 			next := styleDim.Render(job.nextRun())
@@ -803,6 +814,7 @@ func (m model) viewJobs() string {
 		keyHint("r", "restore", colorViolet),
 		keyHint("t", "on/off", colorFuchsia),
 		keyHint("n", "mode", colorGreen),
+		keyHint("w", "live sync", colorLive),
 		keyHint("esc", "back", colorMuted),
 	}, sep))
 	return b.String()

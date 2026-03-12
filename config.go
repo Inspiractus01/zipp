@@ -20,6 +20,7 @@ type Job struct {
 	Compress      bool      `json:"compress"`
 	NestEnabled   bool      `json:"nestEnabled,omitempty"` // legacy, use NestMode
 	NestMode      string    `json:"nestMode,omitempty"`    // "local", "nest", "both"
+	WatchMode     bool      `json:"watchMode,omitempty"`   // trigger backup on file change
 }
 
 // mode returns the effective backup mode, migrating legacy NestEnabled.
@@ -95,7 +96,7 @@ func (c *Config) removeJob(id string) {
 }
 
 func (j *Job) isDue() bool {
-	if !j.Enabled || j.IntervalHours == 0 {
+	if !j.Enabled || j.WatchMode || j.IntervalHours == 0 {
 		return false
 	}
 	if j.LastRun.IsZero() {
@@ -107,6 +108,12 @@ func (j *Job) isDue() bool {
 func (j *Job) nextRun() string {
 	if !j.Enabled {
 		return "disabled"
+	}
+	if j.WatchMode {
+		if j.LastRun.IsZero() {
+			return "watching"
+		}
+		return "last: " + j.LastRun.Format("15:04:05")
 	}
 	if j.IntervalHours == 0 {
 		return "manual"

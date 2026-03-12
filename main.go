@@ -101,6 +101,17 @@ func runCLI(args []string) {
 			fmt.Printf("%s  %-24s  %s\n", status, j.Name, j.nextRun())
 		}
 
+	case "watch":
+		cfg, err := loadConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := startWatchers(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+
 	case "uninstall", "--uninstall":
 		uninstall()
 
@@ -108,12 +119,13 @@ func runCLI(args []string) {
 		fmt.Printf("zipp v%s\n", version)
 
 	case "help", "-h", "--help":
-		fmt.Print(`🪰 Zipp v` + version + `
+		fmt.Print(`zipp v` + version + `
 
 Usage:
   zipp              open interactive UI
   zipp run          run jobs that are due (for cron/systemd)
   zipp run-all      run all enabled jobs
+  zipp watch        watch all live-sync jobs for file changes
   zipp list         list all jobs
   zipp version      show version
   zipp uninstall    remove zipp from this system

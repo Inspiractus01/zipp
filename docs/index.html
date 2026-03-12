@@ -6,7 +6,7 @@
   <title>zipp — simple, fast backups</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -27,7 +27,7 @@
     body {
       background: var(--bg);
       color: var(--white);
-      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-family: 'Space Mono', 'Courier New', monospace;
       font-size: 15px;
       line-height: 1.7;
       -webkit-font-smoothing: antialiased;
@@ -135,40 +135,95 @@
     /* nodes */
     .conn-node {
       display: flex; flex-direction: column; align-items: center; gap: 10px;
-      min-width: 160px;
+      min-width: 160px; position: relative;
     }
     .conn-node-box {
       border: 1px solid var(--border); border-radius: 8px;
       padding: 16px 20px; background: var(--bg2);
       display: flex; flex-direction: column; align-items: center; gap: 8px;
-      width: 160px;
+      width: 160px; height: 140px; justify-content: center; position: relative;
+      transition: border-color .4s, box-shadow .4s;
     }
     .conn-node-box.v { border-color: rgba(123,94,248,.4); }
     .conn-node-box.t { border-color: rgba(13,148,136,.4); }
+    .conn-node-box.v.active {
+      border-color: rgba(167,139,250,.8);
+      box-shadow: 0 0 22px rgba(123,94,248,.3), 0 0 6px rgba(123,94,248,.15) inset;
+    }
+    .conn-node-box.t.active {
+      border-color: rgba(94,234,212,.8);
+      box-shadow: 0 0 22px rgba(13,148,136,.3), 0 0 6px rgba(13,148,136,.15) inset;
+    }
     .conn-node-name { font-size: 13px; font-weight: 700; }
     .conn-node-name.v { color: var(--lavender); }
     .conn-node-name.t { color: var(--teal-l); }
     .conn-node-sub { font-size: 11px; color: var(--dim); letter-spacing: .04em; margin-top: 2px; }
 
+    /* ping ring */
+    .conn-ring {
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 160px; height: 120px; border-radius: 10px;
+      border: 1px solid; pointer-events: none;
+      animation: conn-ping 3s ease-out infinite;
+    }
+    .conn-ring.v { border-color: rgba(123,94,248,.55); animation-delay: 0s; }
+    .conn-ring.t { border-color: rgba(13,148,136,.55); animation-delay: 1.5s; }
+    @keyframes conn-ping {
+      0%   { transform: translateX(-50%) scale(1);    opacity: .7; }
+      100% { transform: translateX(-50%) scale(1.3);  opacity: 0; }
+    }
+
     /* pipe */
     .conn-pipe {
       flex: 1; display: flex; flex-direction: column; align-items: center;
-      gap: 8px; padding: 0 12px; min-width: 200px; max-width: 320px;
+      gap: 10px; padding: 0 16px; min-width: 200px; max-width: 320px;
     }
-    .conn-label-top {
-      font-size: 12px; color: #c8d0dc; letter-spacing: .04em;
-      font-weight: 500;
+
+    /* tailscale badge */
+    .ts-badge {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; letter-spacing: .06em;
+      color: #cbd5e1; font-weight: 500;
+    }
+    .ts-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #4ade80;
+      box-shadow: 0 0 7px rgba(74,222,128,.8);
+      animation: pulse 2s ease infinite;
+      flex-shrink: 0;
+    }
+    .ts-lock { color: #64748b; font-size: 10px; }
+
+    /* beam + track */
+    .conn-beam-wrap {
+      width: 100%; position: relative; height: 20px;
     }
     .conn-track {
-      width: 100%; height: 16px; position: relative; overflow: hidden;
-      display: flex; align-items: center;
+      position: absolute; inset: 0; overflow: hidden;
     }
-    .conn-line-bg {
-      position: absolute; top: 50%; left: 0; right: 0; height: 1px;
-      background: rgba(255,255,255,.1);
-      transform: translateY(-50%);
+    .conn-svg-beam {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      left: 0; width: 100%; height: 4px; pointer-events: none; overflow: visible;
+    }
+    .beam-dashes {
+      animation: dash-flow 1.8s linear infinite;
+    }
+    @keyframes dash-flow {
+      from { stroke-dashoffset: 40; }
+      to   { stroke-dashoffset: 0; }
     }
     .conn-label-bot { font-size: 11px; color: var(--muted); }
+
+    /* nest animation when active — tilde wave driven by JS */
+    #diag-nest.nest-active {
+      text-shadow: 0 0 18px rgba(94,234,212,.5), 0 0 40px rgba(13,148,136,.3);
+    }
+    /* base track line (always visible under beam) */
+    .conn-track-line {
+      position: absolute; top: 50%; left: 0; right: 0;
+      height: 1px; background: rgba(255,255,255,.08);
+      transform: translateY(-50%); pointer-events: none;
+    }
 
     /* ── section headings ── */
     .s-label {
@@ -241,6 +296,28 @@
       100% { box-shadow: 0 0 0 0   rgba(134,239,172,0);  }
     }
 
+    /* ── who is it for ── */
+    .audience-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; margin-top: 36px;
+    }
+    .aud-card {
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 22px 24px; background: var(--bg2);
+    }
+    .aud-tag {
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--lavender); margin-bottom: 10px; display: block; font-weight: 700;
+    }
+    .aud-card h3 { font-size: 14px; color: var(--white); margin-bottom: 6px; font-weight: 700; }
+    .aud-card p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
+    .aud-chips   { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .aud-chip {
+      font-size: 11px; padding: 2px 8px;
+      border: 1px solid var(--border); border-radius: 3px; color: var(--dim);
+    }
+    @media (max-width: 600px) { .audience-grid { grid-template-columns: 1fr; } }
+
     /* ── footer ── */
     footer {
       padding: 36px 32px; color: var(--dim); font-size: 13px;
@@ -273,6 +350,7 @@
 <!-- nav -->
 <nav>
   <span class="nav-logo">zipp</span>
+  <a href="#who">who is it for</a>
   <a href="#nest">zipp-nest</a>
   <a href="#install">install</a>
   <a href="https://github.com/Inspiractus01/zipp" target="_blank">github</a>
@@ -291,7 +369,7 @@
   /||\</pre>
     <div>
       <h1><em>zipp</em><br>simple, fast backups.</h1>
-      <p class="tagline">Snapshots. Scheduling. Restore.<br>A terminal app that stays out of your way.</p>
+      <p class="tagline">Snapshots. Scheduling. Restore.<br>Works locally or sends to your own server.<br>A terminal app that stays out of your way.</p>
       <div class="actions">
         <a href="#install" class="btn btn-v">Get started</a>
         <a href="https://github.com/Inspiractus01/zipp" target="_blank" class="btn btn-vo">GitHub ↗</a>
@@ -306,16 +384,14 @@
 <span class="td">  \──/</span>
 <span class="td">  /||\</span>
 
-<span class="tll">  ▸   Jobs</span><span class="td">              4 total</span>
-<span class="td">      Run all</span>
-<span class="td">      Add job</span>
-<span class="td">      Setup</span>
-<span class="td">      Nest             </span><span class="tg">✓ connected</span>
-<span class="td">      Quit</span>
+<span class="tll">  ▸   minecraft-srv  </span><span class="tg">[nest+local]</span><span class="td">   2h ago   12.4 MB</span>
+<span class="td">      postgres       </span><span class="tg">[nest]      </span><span class="td">   30m ago   4.1 MB</span>
+<span class="td">      documents      </span><span class="ttl">[local]     </span><span class="td">   1h ago  820 MB</span>
+<span class="td">      photos         </span><span class="tg">[nest+local]</span><span class="td">   6h ago    2.3 GB</span>
 
-<span class="tg">  ✓ scheduler active</span><span class="td"> via launchd</span>
+<span class="tg">  ✓ scheduler active</span><span class="td"> · </span><span class="tg">✓ nest connected</span>
 
-<span class="td">  ↑↓ navigate · enter select · q quit</span></code>
+<span class="td">  ↑↓ navigate · enter run · n mode · r restore · q quit</span></code>
   </div>
 </section>
 
@@ -334,6 +410,60 @@
   </div>
 </section>
 
+<!-- ── who is it for ── -->
+<section id="who">
+  <p class="s-label">who is it for</p>
+  <h2>Built for people who<br>run their own stuff.</h2>
+  <p class="desc">zipp is for anyone who wants reliable, automatic backups without signing up for another cloud service. No account needed. No monthly fee. You own the storage.</p>
+
+  <div class="audience-grid">
+    <div class="aud-card">
+      <span class="aud-tag">game servers</span>
+      <h3>Game server owners</h3>
+      <p>You update a mod, add a plugin, the world corrupts. With zipp, every backup is a snapshot you can roll back to in one keypress — before anything breaks.</p>
+      <div class="aud-chips">
+        <span class="aud-chip">Minecraft</span>
+        <span class="aud-chip">Terraria</span>
+        <span class="aud-chip">DayZ</span>
+        <span class="aud-chip">Palworld</span>
+      </div>
+    </div>
+    <div class="aud-card">
+      <span class="aud-tag">developers</span>
+      <h3>Developers &amp; self-hosters</h3>
+      <p>Back up databases, config files and project directories on a schedule. No AWS, no S3, no YAML to write. One binary, runs in the background.</p>
+      <div class="aud-chips">
+        <span class="aud-chip">postgres</span>
+        <span class="aud-chip">dotfiles</span>
+        <span class="aud-chip">~/projects</span>
+        <span class="aud-chip">/etc</span>
+      </div>
+    </div>
+    <div class="aud-card">
+      <span class="aud-tag">home lab</span>
+      <h3>Home lab &amp; NAS users</h3>
+      <p>Pair zipp with zipp-nest to back up one machine to another. Raspberry Pi to NAS, laptop to VPS — whatever you have. No subscription, ever.</p>
+      <div class="aud-chips">
+        <span class="aud-chip">Raspberry Pi</span>
+        <span class="aud-chip">NAS</span>
+        <span class="aud-chip">VPS</span>
+        <span class="aud-chip">home server</span>
+      </div>
+    </div>
+    <div class="aud-card">
+      <span class="aud-tag">everyone else</span>
+      <h3>Anyone done with cloud</h3>
+      <p>Photos, documents, anything important. You own the disk, you own the data. Install once, set a schedule, forget about it.</p>
+      <div class="aud-chips">
+        <span class="aud-chip">photos</span>
+        <span class="aud-chip">documents</span>
+        <span class="aud-chip">any folder</span>
+        <span class="aud-chip">any machine</span>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ── features ── -->
 <section>
   <p class="s-label">features</p>
@@ -345,35 +475,35 @@
       <div class="feat-icon">snap</div>
       <div class="feat-body">
         <h3>Timestamped snapshots</h3>
-        <p>Every run creates a new snapshot. Set how many to keep — old ones are pruned automatically. Browse and restore any of them from the TUI.</p>
+        <p>Every backup run creates a new dated snapshot — not an overwrite. You decide how many to keep, old ones are cleaned up automatically. Every version is there if you need it.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">sched</div>
       <div class="feat-body">
-        <h3>Per-job scheduling</h3>
-        <p>Set an interval in hours per job. zipp registers a launchd agent (macOS) or systemd timer (Linux) — runs in the background, no cron needed.</p>
+        <h3>Runs on a schedule, automatically</h3>
+        <p>Set a backup interval per job (e.g. every 2 hours). zipp installs a system scheduler — launchd on macOS, systemd on Linux — so it keeps running even when you close the app. No cron, no scripts.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">.gz</div>
       <div class="feat-body">
-        <h3>Compressed or folder mode</h3>
-        <p>Toggle <code class="i">[zip]</code> per job to store <code class="i">.tar.gz</code> archives instead of rsync folders. Significant space savings for large directories.</p>
+        <h3>Compressed archives or folder copy</h3>
+        <p>Toggle compression per job. Compressed mode packs everything into a <code class="i">.tar.gz</code> — good for large game worlds or databases. Folder mode keeps files as-is — good for quick access.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">mode</div>
       <div class="feat-body">
-        <h3>Three backup modes</h3>
-        <p>Press <code class="i">n</code> on any job to cycle: <code class="i">[local]</code> keeps backups on this machine only, <code class="i">[nest]</code> sends to the remote server only, <code class="i">[nest+local]</code> does both.</p>
+        <h3>Local, remote, or both</h3>
+        <p>Press <code class="i">n</code> on any job to switch between three modes. <code class="i">[local]</code> — backup stays on this machine. <code class="i">[nest]</code> — backup goes to your remote server only. <code class="i">[nest+local]</code> — both at once.</p>
       </div>
     </div>
     <div class="feat-row">
       <div class="feat-icon">rest</div>
       <div class="feat-body">
         <h3>One-key restore</h3>
-        <p>Press <code class="i">r</code> on any job to see its snapshots. Select one, confirm — files are restored to the original source path.</p>
+        <p>Press <code class="i">r</code> on any job to see all its snapshots listed by date. Pick one, confirm — zipp puts the files back exactly where they came from. Done.</p>
       </div>
     </div>
   </div>
@@ -386,47 +516,63 @@
 ───────────────────────────────────────────-->
 <section class="conn-section" style="border-top:1px solid var(--border)">
 <div class="wrap">
-  <p class="s-label" style="text-align:center;margin-bottom:40px">how zipp-nest works</p>
+  <p class="s-label" style="text-align:center;margin-bottom:10px">how zipp-nest works</p>
+  <p style="text-align:center;color:var(--muted);font-size:13px;margin-bottom:44px;max-width:460px;margin-left:auto;margin-right:auto">backups travel end-to-end encrypted over your private network — no open ports, no third-party storage, your data stays yours.</p>
 
   <div class="conn-wrap">
 
     <!-- zipp node -->
     <div class="conn-node">
-      <div class="conn-node-box v">
-        <pre class="ascii-fly" style="font-size:13px;text-shadow:none">  )()(
+      <div class="conn-ring v"></div>
+      <div class="conn-node-box v" id="diag-zipp-box">
+        <pre class="ascii-fly" id="diag-fly" style="font-size:13px">  )()(
  ( <span class="fly-dots">●●</span> )
   \──/
   /||\</pre>
         <div class="conn-node-name v">zipp</div>
       </div>
-      <div class="conn-node-sub">your laptop / desktop</div>
+      <div class="conn-node-sub">your machine</div>
     </div>
 
     <!-- pipe -->
     <div class="conn-pipe">
-      <div class="conn-label-top">tailscale · encrypted</div>
-      <div class="conn-track" id="pkt-track">
-        <div class="conn-line-bg"></div>
+      <div class="ts-badge">
+        <div class="ts-dot"></div>
+        end-to-end encrypted
+        <span class="ts-lock">[~~]</span>
+      </div>
+      <div class="conn-beam-wrap">
+        <div class="conn-track-line"></div>
+        <svg class="conn-svg-beam" viewBox="0 0 300 2" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="beamGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stop-color="#7b5ef8" stop-opacity="0.7"/>
+              <stop offset="50%"  stop-color="#a78bfa" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#0d9488" stop-opacity="0.7"/>
+            </linearGradient>
+          </defs>
+          <line x1="0" y1="1" x2="300" y2="1"
+            stroke="url(#beamGrad)" stroke-width="1.5"
+            stroke-dasharray="5 8" class="beam-dashes"/>
+        </svg>
+        <div class="conn-track" id="pkt-track"></div>
       </div>
       <div class="conn-label-bot">over the internet</div>
     </div>
 
     <!-- nest node -->
     <div class="conn-node">
-      <div class="conn-node-box t">
-        <pre class="ascii-nest" style="font-size:13px;text-shadow:none">  ,~~~~~,
+      <div class="conn-ring t"></div>
+      <div class="conn-node-box t" id="diag-nest-box">
+        <pre class="ascii-nest" id="diag-nest" style="font-size:13px">  ,~~~~~,
  (~<span class="nest-accent">~~~~~</span>~)
   `~~~~~`</pre>
         <div class="conn-node-name t">zipp-nest</div>
       </div>
-      <div class="conn-node-sub">your server / NAS / VPS</div>
+      <div class="conn-node-sub">your server / NAS</div>
     </div>
 
   </div>
-
-  <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:32px;max-width:480px;margin-left:auto;margin-right:auto">
-    backups travel over your private Tailscale network. encrypted end-to-end. nothing touches a third-party server.
-  </p>
 </div>
 </section>
 
@@ -451,7 +597,7 @@
       <p class="desc">
         A self-hosted backup server that pairs with zipp.<br>
         Install it on any machine — your home server, a VPS, a Raspberry Pi.<br>
-        Connect over Tailscale. Your data stays yours.
+        Backups are end-to-end encrypted. Your data never touches anyone else's server.
       </p>
       <div class="actions mt6">
         <a href="#nest-install" class="btn btn-t">Install on server</a>
@@ -467,7 +613,7 @@
       <div class="feat-icon t">priv</div>
       <div class="feat-body">
         <h3>Private by design</h3>
-        <p>Connects over <a href="https://tailscale.com" target="_blank" style="color:var(--teal-l);text-decoration:none">Tailscale</a> — a private encrypted network you control. No open ports, no S3 bucket, no third-party storage. Just two machines talking to each other.</p>
+        <p>Backups travel end-to-end encrypted between your machines. No open ports, no S3 bucket, no third-party storage. Works on a local network or remotely — just two machines talking directly to each other.</p>
       </div>
     </div>
     <div class="feat-row">
@@ -500,7 +646,7 @@
     <div class="steps">
       <div class="step"><div class="step-n">1</div><div><h4>Install zipp on your client machine</h4><p>One curl command. Binary in <code class="i">/usr/local/bin</code>, scheduler registered automatically.</p></div></div>
       <div class="step"><div class="step-n">2</div><div><h4>Install zipp-nest on your server</h4><p>Same process. Open the TUI, press <strong style="color:var(--teal-l)">Start server</strong> — it registers as a background service.</p></div></div>
-      <div class="step"><div class="step-n">3</div><div><h4>Connect with Tailscale</h4><p>Enable Tailscale on both machines. zipp-nest shows a short connection code — paste it into zipp on the Nest page.</p></div></div>
+      <div class="step"><div class="step-n">3</div><div><h4>Connect to your server</h4><p>zipp-nest shows a short connection code — paste it into zipp on the Nest page. Works over local network or remotely.</p></div></div>
       <div class="step"><div class="step-n">4</div><div><h4>Set mode and run</h4><p>Press <code class="i t">n</code> on any job to pick <code class="i t">[local]</code>, <code class="i t">[nest]</code>, or <code class="i t">[nest+local]</code>. Backups go where you want them.</p></div></div>
     </div>
   </div>
@@ -515,9 +661,9 @@
 <span class="tg">  ● running</span><span class="td">     (launchd)</span>
 <span class="tg">  ● connected</span><span class="td">   100.64.0.2</span>
 
-<span class="ttl">  ↑  minecraft   </span><span class="td">2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)</span>
-<span class="ttl">  ↑  terraria    </span><span class="td">2026-03-11 11:05  snapshot.tar.gz  ( 8.1 MB)</span>
-<span class="ttl">  ↑  dayzserver  </span><span class="td">2026-03-10 22:14  snapshot.tar.gz  (31.7 MB)</span>
+<span class="ttl">  ↑  minecraft-srv  </span><span class="td">2026-03-11 14:23  snapshot.tar.gz  (12.4 MB)</span>
+<span class="ttl">  ↑  postgres       </span><span class="td">2026-03-11 13:51  snapshot.tar.gz  ( 4.1 MB)</span>
+<span class="ttl">  ↑  photos         </span><span class="td">2026-03-10 22:14  snapshot.tar.gz  ( 2.3 GB)</span>
 
 <span class="td">  ↑↓ navigate · enter select · q quit</span></code>
   </div>
@@ -554,7 +700,7 @@
 </footer>
 
 <script>
-/* versions from GitHub */
+/* ── versions from GitHub ── */
 async function fetchVer(repo) {
   try {
     const r = await fetch(`https://api.github.com/repos/Inspiractus01/${repo}/releases/latest`);
@@ -565,16 +711,73 @@ async function fetchVer(repo) {
 (async () => {
   const [zv, nv] = await Promise.all([fetchVer('zipp'), fetchVer('zipp-nest')]);
   ['nav-ver','hero-ver','install-ver'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = zv;
+    const el = document.getElementById(id); if (el) el.textContent = zv;
   });
   ['nest-ver','nest-install-ver'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = nv;
+    const el = document.getElementById(id); if (el) el.textContent = nv;
   });
 })();
 
-/* packet animation — violet forward, green back */
+/* ── wing frames ── */
+const wingFrames = ['  )()(', '  /\\/\\', '  ~~~~', '  \\/\\/'];
+function flyHTML(idx) {
+  return [wingFrames[idx], ' ( <span class="fly-dots">●●</span> )', '  \\──/', '  /||\\'].join('\n');
+}
+
+/* hero fly — always animates */
+let heroIdx = 0;
+const heroFlyEl = document.getElementById('fly-ascii');
+if (heroFlyEl) setInterval(() => { heroFlyEl.innerHTML = flyHTML(++heroIdx % wingFrames.length); }, 220);
+
+/* diagram fly — controlled by packet position */
+let diagIdx = 0, diagTimer = null;
+const diagFlyEl  = document.getElementById('diag-fly');
+const diagZippBox = document.getElementById('diag-zipp-box');
+const diagNestBox = document.getElementById('diag-nest-box');
+const diagNestEl  = document.getElementById('diag-nest');
+
+function startDiagFly() {
+  if (diagTimer) return;
+  diagTimer = setInterval(() => {
+    if (diagFlyEl) diagFlyEl.innerHTML = flyHTML(++diagIdx % wingFrames.length);
+  }, 220);
+}
+function stopDiagFly() {
+  clearInterval(diagTimer); diagTimer = null;
+  if (diagFlyEl) diagFlyEl.innerHTML = flyHTML(0);
+}
+
+/* diagram nest — tilde wave scan (mirrors TUI accent style) */
+// Middle row: (~[5 tildes]~)  — scan a 3-char bright window across the 5
+function nestHTML(frame) {
+  const t = ['~','~','~','~','~'];
+  const bright = [frame % 5, (frame+1) % 5, (frame+2) % 5];
+  const mid = t.map((c,i) =>
+    bright.includes(i) ? `<span class="nest-accent">${c}</span>` : c
+  ).join('');
+  return `  ,~~~~~,\n (~${mid}~)\n  \`~~~~~\``;
+}
+
+let nestFrame = 0, nestTimer = null;
+function startNestAnim() {
+  if (nestTimer) return;
+  if (diagNestEl)  diagNestEl.classList.add('nest-active');
+  if (diagNestBox) diagNestBox.classList.add('active');
+  nestTimer = setInterval(() => {
+    nestFrame++;
+    if (diagNestEl) diagNestEl.innerHTML = nestHTML(nestFrame);
+  }, 180);
+}
+function stopNestAnim() {
+  clearInterval(nestTimer); nestTimer = null;
+  if (diagNestEl) {
+    diagNestEl.classList.remove('nest-active');
+    diagNestEl.innerHTML = `  ,~~~~~,\n (~<span class="nest-accent">~~~~~</span>~)\n  \`~~~~~\``;
+  }
+  if (diagNestBox) diagNestBox.classList.remove('active');
+}
+
+/* ── packet animation ── */
 function animatePacket(track, forward, color, glow, duration, done) {
   const dot = document.createElement('div');
   const w = track.offsetWidth;
@@ -582,15 +785,13 @@ function animatePacket(track, forward, color, glow, duration, done) {
     position:absolute; width:9px; height:9px; border-radius:50%;
     top:50%; transform:translateY(-50%);
     background:${color};
-    box-shadow:0 0 10px ${glow}, 0 0 24px ${glow};
-    pointer-events:none;
+    box-shadow:0 0 10px ${glow}, 0 0 26px ${glow};
+    pointer-events:none; z-index:2;
   `;
   track.appendChild(dot);
-
   const startX = forward ? -9 : w + 9;
   const endX   = forward ? w + 9 : -9;
   const t0 = performance.now();
-
   (function frame(now) {
     const p = Math.min((now - t0) / duration, 1);
     dot.style.left = (startX + (endX - startX) * p) + 'px';
@@ -602,12 +803,18 @@ function animatePacket(track, forward, color, glow, duration, done) {
 function startPacketLoop() {
   const track = document.getElementById('pkt-track');
   if (!track) return;
-
   function loop() {
-    // zipp → nest: violet
+    /* violet: zipp → nest  —  fly animates while packet is departing from zipp */
+    startDiagFly();
+    if (diagZippBox) diagZippBox.classList.add('active');
     animatePacket(track, true, '#a78bfa', 'rgba(167,139,250,0.5)', 2200, () => {
+      /* packet arrived at nest */
+      stopDiagFly();
+      if (diagZippBox) diagZippBox.classList.remove('active');
+      startNestAnim();
       setTimeout(() => {
-        // nest → zipp: pea green
+        /* nest done storing — send ack: green nest → zipp */
+        stopNestAnim();
         animatePacket(track, false, '#4ade80', 'rgba(74,222,128,0.5)', 2200, () => {
           setTimeout(loop, 2000);
         });
@@ -618,19 +825,7 @@ function startPacketLoop() {
 }
 startPacketLoop();
 
-/* fly wing animation */
-const wingFrames = ['  )()(', '  /\\/\\', '  ~~~~', '  \\/\\/'];
-let wingIdx = 0;
-document.querySelectorAll('#fly-ascii, .conn-node .ascii-fly').forEach(el => {
-  const base = [null, ' ( <span class="fly-dots">●●</span> )', '  \\──/', '  /||\\'];
-  setInterval(() => {
-    wingIdx = (wingIdx + 1) % wingFrames.length;
-    base[0] = wingFrames[wingIdx];
-    el.innerHTML = base.join('\n');
-  }, 220);
-});
-
-/* copy button */
+/* ── copy button ── */
 function cpbtn(btn, text) {
   navigator.clipboard.writeText(text).then(() => {
     const o = btn.textContent;
