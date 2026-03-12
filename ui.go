@@ -48,9 +48,11 @@ type tickMsg struct{}
 
 type nestHealthMsg struct{ ok bool }
 
+var nestClient = &http.Client{Timeout: 8 * time.Second}
+
 func nestHealthCmd(address string) tea.Cmd {
 	return func() tea.Msg {
-		resp, err := http.Get("http://" + address + "/health")
+		resp, err := nestClient.Get("http://" + address + "/health")
 		if err != nil {
 			return nestHealthMsg{ok: false}
 		}
@@ -62,7 +64,7 @@ func nestHealthCmd(address string) tea.Cmd {
 func nestHealthCmdDelayed(address string) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(30 * time.Second)
-		resp, err := http.Get("http://" + address + "/health")
+		resp, err := nestClient.Get("http://" + address + "/health")
 		if err != nil {
 			return nestHealthMsg{ok: false}
 		}
