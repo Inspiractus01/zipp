@@ -574,18 +574,15 @@ async function fetchVer(repo) {
   });
 })();
 
-/* packet animation — sequential, pea green */
-const PKT_COLOR = '#4ade80';
-const PKT_GLOW  = 'rgba(74,222,128,0.5)';
-
-function animatePacket(track, forward, duration, done) {
+/* packet animation — violet forward, green back */
+function animatePacket(track, forward, color, glow, duration, done) {
   const dot = document.createElement('div');
   const w = track.offsetWidth;
   dot.style.cssText = `
     position:absolute; width:9px; height:9px; border-radius:50%;
     top:50%; transform:translateY(-50%);
-    background:${PKT_COLOR};
-    box-shadow:0 0 10px ${PKT_GLOW}, 0 0 24px ${PKT_GLOW};
+    background:${color};
+    box-shadow:0 0 10px ${glow}, 0 0 24px ${glow};
     pointer-events:none;
   `;
   track.appendChild(dot);
@@ -607,19 +604,16 @@ function startPacketLoop() {
   if (!track) return;
 
   function loop() {
-    // zipp → nest (forward)
-    animatePacket(track, true, 2200, () => {
-      // pause — data arrived at server
+    // zipp → nest: violet
+    animatePacket(track, true, '#a78bfa', 'rgba(167,139,250,0.5)', 2200, () => {
       setTimeout(() => {
-        // nest → zipp (backward, acknowledgment)
-        animatePacket(track, false, 2200, () => {
-          // rest before next cycle
+        // nest → zipp: pea green
+        animatePacket(track, false, '#4ade80', 'rgba(74,222,128,0.5)', 2200, () => {
           setTimeout(loop, 2000);
         });
       }, 900);
     });
   }
-  // small initial delay so layout is ready
   setTimeout(loop, 600);
 }
 startPacketLoop();
