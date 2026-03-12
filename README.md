@@ -1,13 +1,10 @@
 # zipp
 
-```
-  )()(
- ( ●● )
-  \──/
-  /||\
-```
+[![zipp](https://zipp.rest/social-card.png)](https://zipp.rest)
 
-Simple backup manager for your terminal. Add jobs, set a schedule, forget about it.
+**[zipp.rest](https://zipp.rest)** — simple, fast backups for your terminal.
+
+Add jobs, set a schedule, forget about it.
 
 ## Install
 
@@ -22,7 +19,6 @@ macOS and Linux · amd64 and arm64
 - **Snapshot backups** — every run creates a timestamped copy, old ones pruned automatically
 - **Scheduler** — installs a launchd agent (macOS) or systemd timer (Linux), runs in the background
 - **Three backup modes** — `[local]` stays on this machine, `[nest]` goes to your server, `[nest+local]` does both
-- **Live sync** — watch a folder and sync instantly on any file change
 - **One-key restore** — browse snapshots and restore from the TUI
 
 ## Commands
@@ -30,7 +26,6 @@ macOS and Linux · amd64 and arm64
 ```
 zipp              open the TUI
 zipp run          run jobs that are due (called by the scheduler)
-zipp watch        start live sync watchers
 zipp list         list all jobs
 ```
 
