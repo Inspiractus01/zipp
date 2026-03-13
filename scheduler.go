@@ -16,7 +16,6 @@ type schedulerStatus struct {
 }
 
 func checkScheduler() schedulerStatus {
-	// systemd (linux)
 	if runtime.GOOS == "linux" {
 		out, err := exec.Command("systemctl", "is-active", "zipp.timer").Output()
 		if err == nil && strings.TrimSpace(string(out)) == "active" {
@@ -24,7 +23,6 @@ func checkScheduler() schedulerStatus {
 		}
 	}
 
-	// launchd (macOS)
 	if runtime.GOOS == "darwin" {
 		home, _ := os.UserHomeDir()
 		plist := home + "/Library/LaunchAgents/com.zipp.runner.plist"
@@ -33,7 +31,6 @@ func checkScheduler() schedulerStatus {
 		}
 	}
 
-	// cron fallback
 	out, err := exec.Command("crontab", "-l").Output()
 	if err == nil && strings.Contains(string(out), "zipp run") {
 		return schedulerStatus{active: true, method: "cron"}
@@ -42,7 +39,6 @@ func checkScheduler() schedulerStatus {
 	return schedulerStatus{active: false, method: "none"}
 }
 
-
 func setupScheduler() ([]string, error) {
 	var lines []string
 	self, err := os.Executable()
@@ -50,7 +46,6 @@ func setupScheduler() ([]string, error) {
 		self = "zipp"
 	}
 
-	// linux — systemd
 	if runtime.GOOS == "linux" {
 		if _, err := exec.LookPath("systemctl"); err == nil {
 			lines = append(lines, "detected: Linux + systemd")
@@ -65,7 +60,7 @@ func setupScheduler() ([]string, error) {
 		}
 	}
 
-	// macOS — launchd (no FDA needed, works out of the box)
+	// macOS — launchd (no Full Disk Access needed, writes to ~/Library/LaunchAgents)
 	if runtime.GOOS == "darwin" {
 		lines = append(lines, "detected: macOS")
 		if err := installLaunchd(self); err == nil {
@@ -78,7 +73,6 @@ func setupScheduler() ([]string, error) {
 		}
 	}
 
-	// fallback: cron
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		lines = append(lines, "detected: "+runtime.GOOS)
 	}
@@ -152,37 +146,32 @@ func installLaunchd(bin string) error {
 		return err
 	}
 
-	// load it (unload first in case it exists)
+	// unload first in case an older version is already loaded
 	exec.Command("launchctl", "unload", plist).Run()
 	return exec.Command("launchctl", "load", plist).Run()
 }
 
 func installCron(bin string) error {
 	entry := "0 * * * * " + bin + " run\n"
-
-	// get existing crontab
 	existing, _ := exec.Command("crontab", "-l").Output()
 	if strings.Contains(string(existing), "zipp run") {
-		return nil // already there
+		return nil
 	}
-
-	combined := string(existing) + entry
 	cmd := exec.Command("crontab", "-")
-	cmd.Stdin = strings.NewReader(combined)
+	cmd.Stdin = strings.NewReader(string(existing) + entry)
 	return cmd.Run()
 }
 
 func writeFileRoot(path, content string) error {
 	cmd := exec.Command("sudo", "tee", path)
 	cmd.Stdin = strings.NewReader(content)
-	cmd.Stdout = nil // suppress tee output
+	cmd.Stdout = nil
 	return cmd.Run()
 }
 
 func uninstall() {
 	fmt.Println("uninstalling Zipp...")
 
-	// systemd
 	if runtime.GOOS == "linux" {
 		exec.Command("sudo", "systemctl", "disable", "--now", "zipp.timer").Run()
 		exec.Command("sudo", "rm", "-f",
@@ -193,7 +182,6 @@ func uninstall() {
 		fmt.Println("✓ removed systemd timer")
 	}
 
-	// cron
 	existing, err := exec.Command("crontab", "-l").Output()
 	if err == nil {
 		cleaned := ""
@@ -209,11 +197,9 @@ func uninstall() {
 		}
 	}
 
-	// binary
 	exec.Command("sudo", "rm", "-f", "/usr/local/bin/zipp").Run()
 	fmt.Println("✓ removed binary")
 
-	// config — ask
 	home, _ := os.UserHomeDir()
 	cfgDir := home + "/.zipp"
 	fmt.Print("remove config and jobs (~/.zipp)? [y/N] ")

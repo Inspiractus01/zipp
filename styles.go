@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -62,10 +60,10 @@ var (
 )
 
 var flyWingFrames = []string{
-	`  )()(`, // wings spread
-	`  /\/\`, // wings up
-	`  ~~~~`, // buzzing
-	`  \/\/`, // wings down
+	`  )()(`,
+	`  /\/\`,
+	`  ~~~~`,
+	`  \/\/`,
 }
 
 func renderFlyLines(frame int) string {
@@ -80,11 +78,6 @@ func renderFlyLines(frame int) string {
 func keyHint(key string, label string, c lipgloss.Color) string {
 	return lipgloss.NewStyle().Foreground(c).Bold(true).Render(key) +
 		styleDim.Render(" "+label)
-}
-
-// renderFlyOnly returns just the fly with no name/version beside it.
-func renderFlyOnly(frame int) string {
-	return renderFlyLines(frame)
 }
 
 func renderHeader(subtitle string) string {
@@ -118,25 +111,4 @@ func buildHeader(subtitle string, frame int) string {
 		logo+"  ",
 		"\n\n\n"+right,
 	) + "\n"
-}
-
-// FlyArt is the detailed fly ASCII art used in the README / help text.
-const FlyArt = `
-    \    /\    /
-     \  /  \  /
-     (●      ●)
-      \______/
-        ||||
-       /||||\
-`
-
-// FlyArtLines returns FlyArt as trimmed non-empty lines.
-func FlyArtLines() []string {
-	var out []string
-	for _, l := range strings.Split(FlyArt, "\n") {
-		if strings.TrimSpace(l) != "" {
-			out = append(out, l)
-		}
-	}
-	return out
 }

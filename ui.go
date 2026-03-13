@@ -249,18 +249,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.schedulerInfo = schedulerStatus(msg)
 		return m, nil
 
-	// Streaming job started — kick off ticker + first line read.
 	case runStartedMsg:
 		m.runCh = msg.ch
 		m.runErrCh = msg.errCh
 		return m, tea.Batch(nextLineCmd(msg.ch, msg.errCh), tickCmd())
 
-	// One line arrived from the job.
 	case jobLineMsg:
 		m.runOutput = append(m.runOutput, string(msg))
 		return m, nextLineCmd(m.runCh, m.runErrCh)
 
-	// Streaming job finished.
 	case jobDoneMsg:
 		m.runDone = true
 		m.runCh = nil
@@ -273,12 +270,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.save()
 		return m, nil
 
-	// Animation tick.
 	case tickMsg:
 		m.animFrame++
 		return m, tickCmd()
 
-	// Non-streaming result (setup, update cmds).
 	case runResultMsg:
 		m.runDone = true
 		m.runOutput = msg.lines
@@ -534,7 +529,6 @@ func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.formInputs[m.formStep].Focus()
 			return m, textinput.Blink
 		}
-		// save
 		job := m.buildJob()
 		if job != nil {
 			m.config.addJob(job)
@@ -790,7 +784,6 @@ func (m model) viewJobs() string {
 			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+nameStr, next)
 			b.WriteString(lipgloss.NewStyle().Width(60).Render(line) + "\n")
 
-			// destination warnings
 			if job.Destination == "" {
 				switch job.mode() {
 				case "local":
@@ -799,7 +792,6 @@ func (m model) viewJobs() string {
 					b.WriteString("     " + styleWarning.Render("⚠ backup works only on nest") + "\n")
 				}
 			}
-			// nest not configured warning
 			if (job.mode() == "nest" || job.mode() == "both") && m.config.Nest == nil {
 				b.WriteString("     " + styleError.Render("⚠ nest needs to be configured") + "\n")
 			}
@@ -858,27 +850,21 @@ func (m model) viewRun() string {
 		return m.viewRunDone()
 	}
 
-	// — Running: centered fly + live status —
 	var b strings.Builder
 
-	// compute left pad so fly is centered (fly visual width ≈ 7 chars)
+	// center the fly horizontally (visual width ≈ 7 chars)
 	const flyWidth = 7
 	pad := ""
 	if m.windowWidth > flyWidth {
 		pad = strings.Repeat(" ", (m.windowWidth-flyWidth)/2)
 	}
 
-	// push fly down a bit
 	b.WriteString("\n\n\n")
-
-	// fly lines, each padded to center
-	for _, line := range strings.Split(renderFlyOnly(m.animFrame), "\n") {
+	for _, line := range strings.Split(renderFlyLines(m.animFrame), "\n") {
 		b.WriteString(pad + line + "\n")
 	}
-
 	b.WriteString("\n")
 
-	// last status line (what's happening right now)
 	status := buzzFrames[m.animFrame%len(buzzFrames)]
 	if len(m.runOutput) > 0 {
 		last := strings.TrimSpace(m.runOutput[len(m.runOutput)-1])
@@ -1029,7 +1015,6 @@ func (m model) nestMenuItems() []string {
 		items = append(items, "Enter server code")
 	}
 
-	// tailscale controls after
 	if !m.nestTSStatus.installed {
 		items = append(items, "Setup Tailscale")
 	} else if m.nestTSStatus.loggedIn {
@@ -1146,7 +1131,6 @@ func (m model) viewNestMenu() string {
 	b.WriteString(renderHeader("Nest"))
 	b.WriteString("\n")
 
-	// tailscale status
 	tsLine := "  Tailscale   "
 	if !m.nestTSStatus.installed {
 		tsLine += styleError.Render("○ not installed")
@@ -1159,7 +1143,6 @@ func (m model) viewNestMenu() string {
 	}
 	b.WriteString(tsLine + "\n")
 
-	// nest connection status
 	nestLine := "  Nest        "
 	if m.nestChecking {
 		nestLine += styleDim.Render("checking...")
