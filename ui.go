@@ -106,7 +106,7 @@ type model struct {
 
 	// restore
 	restoreJob    *Job
-	restoreSnaps  []string
+	restoreSnaps  []SnapshotInfo
 	restoreCursor int
 
 	// nest
@@ -458,7 +458,7 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
-			snaps, err := listSnapshots(job)
+			snaps, err := listSnapshotInfos(job)
 			if err != nil || len(snaps) == 0 {
 				break
 			}
@@ -949,7 +949,7 @@ func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "enter":
 		if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
-			snapshot := m.restoreSnaps[m.restoreCursor]
+			snapshot := m.restoreSnaps[m.restoreCursor].Name
 			job := m.restoreJob
 			m.page = pageRun
 			m.runOutput = nil
@@ -974,27 +974,92 @@ func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) viewRestore() string {
 	var b strings.Builder
-	name := ""
+
+	jobName := ""
+	jobDest := ""
 	if m.restoreJob != nil {
-		name = m.restoreJob.Name
+		jobName = m.restoreJob.Name
+		jobDest = expandPath(m.restoreJob.Destination)
 	}
-	b.WriteString(renderHeader("Restore — " + name))
+	b.WriteString(renderHeader("Restore — " + jobName))
 	b.WriteString("\n")
-	b.WriteString(styleDim.Render("  select a snapshot to restore:\n\n"))
 
-	for i, snap := range m.restoreSnaps {
-		label := snap
-		if i == 0 {
-			label += styleDim.Render("  ← newest")
-		}
-		if i == m.restoreCursor {
-			b.WriteString("  " + styleSelected.Render("▸ "+label) + "\n")
-		} else {
-			b.WriteString("  " + styleDim.Render("  "+snap) + "\n")
+	// path header
+	pathStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	b.WriteString("  " + pathStyle.Render(jobDest+"/") + "\n")
+	b.WriteString("  " + styleDim.Render(strings.Repeat("─", 52)) + "\n\n")
+
+	// find max size for bar scaling
+	var maxSize int64 = 1
+	for _, s := range m.restoreSnaps {
+		if s.Size > maxSize {
+			maxSize = s.Size
 		}
 	}
 
-	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · esc back"))
+	const barWidth = 14
+	for i, snap := range m.restoreSnaps {
+		selected := i == m.restoreCursor
+
+		// parse date and time from name like 2006-01-02_15-04-05 or same + .tar.gz
+		rawName := strings.TrimSuffix(strings.TrimSuffix(snap.Name, ".tar.gz"), ".tar.zst")
+		date, timeStr := "", ""
+		if len(rawName) >= 19 {
+			date = rawName[:10]
+			timeStr = strings.ReplaceAll(rawName[11:16], "-", ":")
+		} else {
+			date = rawName
+		}
+
+		// bar
+		filled := int(float64(snap.Size) / float64(maxSize) * barWidth)
+		if filled < 1 && snap.Size > 0 {
+			filled = 1
+		}
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+
+		// size label
+		sizeLabel := formatBytes(snap.Size)
+
+		// badge
+		badge := ""
+		if i == 0 {
+			badge = lipgloss.NewStyle().Foreground(colorGreen).Render(" [latest]")
+		}
+
+		cursor := "  "
+		if selected {
+			cursor = lipgloss.NewStyle().Foreground(colorViolet).Bold(true).Render("▸ ")
+		}
+
+		dateS := lipgloss.NewStyle().Foreground(colorMuted).Render(date)
+		timeS := lipgloss.NewStyle().Foreground(colorGray).Render(timeStr)
+		barS := lipgloss.NewStyle().Foreground(colorViolet).Render(bar)
+		sizeS := lipgloss.NewStyle().Foreground(colorMuted).Width(9).Render(sizeLabel)
+
+		if selected {
+			dateS = lipgloss.NewStyle().Foreground(colorWhite).Bold(true).Render(date)
+			timeS = lipgloss.NewStyle().Foreground(colorLavender).Render(timeStr)
+			barS = lipgloss.NewStyle().Foreground(colorLavender).Render(bar)
+			sizeS = lipgloss.NewStyle().Foreground(colorWhite).Bold(true).Width(9).Render(sizeLabel)
+		}
+
+		b.WriteString("  " + cursor + dateS + "  " + timeS + "  " + barS + "  " + sizeS + badge + "\n")
+	}
+
+	// footer
+	total := len(m.restoreSnaps)
+	maxSnap := 0
+	if m.restoreJob != nil {
+		maxSnap = m.restoreJob.MaxSnapshots
+	}
+	footerParts := fmt.Sprintf("  %d snapshots", total)
+	if maxSnap > 0 {
+		footerParts += fmt.Sprintf("  ·  limit: %d", maxSnap)
+	}
+	b.WriteString("\n  " + styleDim.Render(strings.Repeat("─", 52)) + "\n")
+	b.WriteString("  " + styleDim.Render(footerParts) + "\n")
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter restore · esc back"))
 	return b.String()
 }
 
@@ -1193,7 +1258,7 @@ func (m model) viewConfirmRestore() string {
 	b.WriteString("\n")
 
 	if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
-		snap := m.restoreSnaps[m.restoreCursor]
+		snap := m.restoreSnaps[m.restoreCursor].Name
 		dst := m.restoreJob.Source
 		b.WriteString("  " + styleDim.Render("snapshot:  ") + styleNormal.Render(snap) + "\n")
 		b.WriteString("  " + styleDim.Render("restore to: ") + styleNormal.Render(dst) + "\n\n")

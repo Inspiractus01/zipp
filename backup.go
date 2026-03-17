@@ -146,20 +146,59 @@ func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- str
 
 // listSnapshots returns snapshot names for a job, newest first.
 func listSnapshots(job *Job) ([]string, error) {
+	infos, err := listSnapshotInfos(job)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(infos))
+	for i, s := range infos {
+		names[i] = s.Name
+	}
+	return names, nil
+}
+
+// SnapshotInfo holds a snapshot name and its disk size.
+type SnapshotInfo struct {
+	Name string
+	Size int64
+}
+
+// listSnapshotInfos returns snapshots with sizes for a job, newest first.
+func listSnapshotInfos(job *Job) ([]SnapshotInfo, error) {
 	baseDir := expandPath(job.Destination)
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return nil, err
 	}
-	var snaps []string
+	var snaps []SnapshotInfo
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.zst") {
-			snaps = append(snaps, name)
+		if !e.IsDir() && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") {
+			continue
 		}
+		var size int64
+		if e.IsDir() {
+			size = dirSize(filepath.Join(baseDir, name))
+		} else {
+			if info, err := e.Info(); err == nil {
+				size = info.Size()
+			}
+		}
+		snaps = append(snaps, SnapshotInfo{Name: name, Size: size})
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(snaps)))
+	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Name > snaps[j].Name })
 	return snaps, nil
+}
+
+func dirSize(path string) int64 {
+	var total int64
+	filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }
 
 func runRestore(job *Job, snapshot string, output chan<- string) error {
