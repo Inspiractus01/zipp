@@ -230,7 +230,8 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 // listNestSnapshots fetches snapshot names from zipp-nest for a job.
 func listNestSnapshots(jobName, address string) ([]string, error) {
 	url := fmt.Sprintf("http://%s/backups/%s", address, jobName)
-	resp, err := http.Get(url)
+	client := http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}

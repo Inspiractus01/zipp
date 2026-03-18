@@ -48,6 +48,11 @@ type tickMsg struct{}
 
 type nestHealthMsg struct{ ok bool }
 
+type snapshotsLoadedMsg struct {
+	job   *Job
+	snaps []SnapshotInfo
+}
+
 var nestClient = &http.Client{Timeout: 8 * time.Second}
 
 func nestHealthCmd(address string) tea.Cmd {
@@ -105,9 +110,10 @@ type model struct {
 	editTarget *Job
 
 	// restore
-	restoreJob    *Job
-	restoreSnaps  []SnapshotInfo
-	restoreCursor int
+	restoreJob     *Job
+	restoreSnaps   []SnapshotInfo
+	restoreCursor  int
+	restoreLoading bool
 
 	// nest
 	nestInput      textinput.Model
@@ -186,6 +192,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.restoreJob = nil
 				m.restoreSnaps = nil
 				m.restoreCursor = 0
+				m.restoreLoading = false
 			} else if m.page == pageConfirmRestore {
 				m.page = pageRestore
 			}
@@ -284,6 +291,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.config.save()
 		return m, nil
+
+	case snapshotsLoadedMsg:
+		m.restoreLoading = false
+		if len(msg.snaps) == 0 {
+			m.page = pageJobs
+			return m, nil
+		}
+		m.restoreJob = msg.job
+		m.restoreSnaps = msg.snaps
+		m.restoreCursor = 0
+		m.page = pageRestore
+		return m, nil
 	}
 
 	return m, nil
@@ -295,6 +314,13 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg {
 		return tickMsg{}
 	})
+}
+
+func loadSnapshotsCmd(job *Job, nest *NestConfig) tea.Cmd {
+	return func() tea.Msg {
+		snaps, _ := listSnapshotInfos(job, nest)
+		return snapshotsLoadedMsg{job: job, snaps: snaps}
+	}
 }
 
 func nextLineCmd(ch <-chan string, errCh <-chan error) tea.Cmd {
@@ -458,14 +484,8 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
-			snaps, err := listSnapshotInfos(job, m.config.Nest)
-			if err != nil || len(snaps) == 0 {
-				break
-			}
-			m.restoreJob = job
-			m.restoreSnaps = snaps
-			m.restoreCursor = 0
-			m.page = pageRestore
+			m.restoreLoading = true
+			return m, loadSnapshotsCmd(job, m.config.Nest)
 		}
 	case "c":
 		m.page = pageAdd
@@ -798,20 +818,25 @@ func (m model) viewJobs() string {
 		}
 	}
 
-	sep := styleDim.Render("  ·  ")
-	b.WriteString("\n  " + strings.Join([]string{
-		keyHint("↑↓", "navigate", colorMuted),
-		keyHint("enter", "run", colorGreen),
-		keyHint("e", "edit", colorYellow),
-		keyHint("d", "delete", colorRed),
-	}, sep))
-	b.WriteString("\n  " + strings.Join([]string{
-		keyHint("r", "restore", colorViolet),
-		keyHint("t", "on/off", colorFuchsia),
-		keyHint("n", "mode", colorGreen),
-		keyHint("c", "create new", colorOrange),
-	}, sep))
-	b.WriteString("\n  " + keyHint("esc", "back", colorMuted))
+	if m.restoreLoading {
+		dots := []string{"·  ", "·· ", "···"}
+		b.WriteString("\n  " + styleDim.Render("loading snapshots "+dots[m.animFrame%len(dots)]))
+	} else {
+		sep := styleDim.Render("  ·  ")
+		b.WriteString("\n  " + strings.Join([]string{
+			keyHint("↑↓", "navigate", colorMuted),
+			keyHint("enter", "run", colorGreen),
+			keyHint("e", "edit", colorYellow),
+			keyHint("d", "delete", colorRed),
+		}, sep))
+		b.WriteString("\n  " + strings.Join([]string{
+			keyHint("r", "restore", colorViolet),
+			keyHint("t", "on/off", colorFuchsia),
+			keyHint("n", "mode", colorGreen),
+			keyHint("c", "create new", colorOrange),
+		}, sep))
+		b.WriteString("\n  " + keyHint("esc", "back", colorMuted))
+	}
 	return b.String()
 }
 
