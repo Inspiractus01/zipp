@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -146,7 +148,7 @@ func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- str
 
 // listSnapshots returns snapshot names for a job, newest first.
 func listSnapshots(job *Job) ([]string, error) {
-	infos, err := listSnapshotInfos(job)
+	infos, err := listSnapshotInfos(job, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -157,37 +159,138 @@ func listSnapshots(job *Job) ([]string, error) {
 	return names, nil
 }
 
-// SnapshotInfo holds a snapshot name and its disk size.
+// SnapshotInfo holds a snapshot name, disk size and where it lives.
+// Source is "local", "nest", or "both".
 type SnapshotInfo struct {
-	Name string
-	Size int64
+	Name   string
+	Size   int64
+	Source string
 }
 
-// listSnapshotInfos returns snapshots with sizes for a job, newest first.
-func listSnapshotInfos(job *Job) ([]SnapshotInfo, error) {
+// listSnapshotInfos returns snapshots for a job, newest first.
+// It merges local snapshots with nest snapshots when a nest is configured
+// and the job uses nest mode.
+func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
+	// --- local snapshots ---
+	localMap := map[string]int64{}
 	baseDir := expandPath(job.Destination)
-	entries, err := os.ReadDir(baseDir)
+	if entries, err := os.ReadDir(baseDir); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if !e.IsDir() && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") {
+				continue
+			}
+			var size int64
+			if e.IsDir() {
+				size = dirSize(filepath.Join(baseDir, name))
+			} else {
+				if info, err2 := e.Info(); err2 == nil {
+					size = info.Size()
+				}
+			}
+			localMap[name] = size
+		}
+	}
+
+	// --- nest snapshots ---
+	nestNames := []string{}
+	mode := job.mode()
+	if nest != nil && !nest.Disabled && (mode == "nest" || mode == "both") {
+		nestNames, _ = listNestSnapshots(job.Name, nest.Address)
+	}
+	nestSet := map[string]bool{}
+	for _, n := range nestNames {
+		nestSet[n] = true
+	}
+
+	// --- merge ---
+	seen := map[string]bool{}
+	var snaps []SnapshotInfo
+
+	// add all local
+	for name, size := range localMap {
+		source := "local"
+		if nestSet[name] {
+			source = "both"
+		}
+		snaps = append(snaps, SnapshotInfo{Name: name, Size: size, Source: source})
+		seen[name] = true
+	}
+	// add nest-only
+	for _, name := range nestNames {
+		if !seen[name] {
+			snaps = append(snaps, SnapshotInfo{Name: name, Size: 0, Source: "nest"})
+		}
+	}
+
+	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Name > snaps[j].Name })
+	return snaps, nil
+}
+
+// listNestSnapshots fetches snapshot names from zipp-nest for a job.
+func listNestSnapshots(jobName, address string) ([]string, error) {
+	url := fmt.Sprintf("http://%s/backups/%s", address, jobName)
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
-	var snaps []SnapshotInfo
-	for _, e := range entries {
-		name := e.Name()
-		if !e.IsDir() && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") {
-			continue
-		}
-		var size int64
-		if e.IsDir() {
-			size = dirSize(filepath.Join(baseDir, name))
-		} else {
-			if info, err := e.Info(); err == nil {
-				size = info.Size()
-			}
-		}
-		snaps = append(snaps, SnapshotInfo{Name: name, Size: size})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("nest returned %d", resp.StatusCode)
 	}
-	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Name > snaps[j].Name })
-	return snaps, nil
+	var names []string
+	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
+// runRestoreFromNest downloads a snapshot from zipp-nest and extracts it.
+func runRestoreFromNest(job *Job, snapshot string, nest *NestConfig, output chan<- string) error {
+	dst := expandPath(job.Source)
+	output <- fmt.Sprintf("→ restoring %s from nest", job.Name)
+	output <- fmt.Sprintf("  snapshot: %s", snapshot)
+	output <- fmt.Sprintf("  to:       %s", dst)
+	output <- "  downloading from nest..."
+
+	url := fmt.Sprintf("http://%s/backups/%s/%s", nest.Address, job.Name, snapshot)
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("nest download failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("nest returned %d", resp.StatusCode)
+	}
+
+	// write to temp file
+	tmp, err := os.CreateTemp("", "zipp-nest-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("temp file: %w", err)
+	}
+	defer os.Remove(tmp.Name())
+
+	n, err := io.Copy(tmp, resp.Body)
+	if err != nil {
+		tmp.Close()
+		return fmt.Errorf("download failed: %w", err)
+	}
+	tmp.Close()
+	output <- fmt.Sprintf("  downloaded %s", formatBytes(n))
+	output <- "  extracting..."
+
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("could not create destination: %w", err)
+	}
+	cmd := exec.Command("tar", "-xzf", tmp.Name(), "-C", dst)
+	if runtime.GOOS == "darwin" {
+		cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
+	}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("extraction failed: %w\n%s", err, string(out))
+	}
+	output <- "  ✓ restored from nest"
+	return nil
 }
 
 func dirSize(path string) int64 {

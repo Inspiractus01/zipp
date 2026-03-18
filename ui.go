@@ -458,7 +458,7 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
-			snaps, err := listSnapshotInfos(job)
+			snaps, err := listSnapshotInfos(job, m.config.Nest)
 			if err != nil || len(snaps) == 0 {
 				break
 			}
@@ -949,8 +949,9 @@ func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "enter":
 		if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
-			snapshot := m.restoreSnaps[m.restoreCursor].Name
+			snap := m.restoreSnaps[m.restoreCursor]
 			job := m.restoreJob
+			nest := m.config.Nest
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
@@ -961,7 +962,11 @@ func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				errCh := make(chan error, 1)
 				go func() {
 					defer close(ch)
-					errCh <- runRestore(job, snapshot, ch)
+					if snap.Source == "nest" && nest != nil {
+						errCh <- runRestoreFromNest(job, snap.Name, nest, ch)
+					} else {
+						errCh <- runRestore(job, snap.Name, ch)
+					}
 				}()
 				return runStartedMsg{ch: ch, errCh: errCh}
 			}
@@ -1021,10 +1026,22 @@ func (m model) viewRestore() string {
 		// size label
 		sizeLabel := formatBytes(snap.Size)
 
-		// badge
+		// source badge
+		var sourceBadge string
+		switch snap.Source {
+		case "nest":
+			sourceBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ade80")).Render(" [nest]")
+		case "both":
+			sourceBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ade80")).Render(" [nest]") +
+				lipgloss.NewStyle().Foreground(colorLavender).Render("+local")
+		default:
+			sourceBadge = lipgloss.NewStyle().Foreground(colorGray).Render(" [local]")
+		}
+
+		// latest badge
 		badge := ""
 		if i == 0 {
-			badge = lipgloss.NewStyle().Foreground(colorGreen).Render(" [latest]")
+			badge = lipgloss.NewStyle().Foreground(colorGreen).Render(" latest")
 		}
 
 		cursor := "  "
@@ -1044,7 +1061,7 @@ func (m model) viewRestore() string {
 			sizeS = lipgloss.NewStyle().Foreground(colorWhite).Bold(true).Width(9).Render(sizeLabel)
 		}
 
-		b.WriteString("  " + cursor + dateS + "  " + timeS + "  " + barS + "  " + sizeS + badge + "\n")
+		b.WriteString("  " + cursor + dateS + "  " + timeS + "  " + barS + "  " + sizeS + sourceBadge + badge + "\n")
 	}
 
 	// footer
@@ -1258,9 +1275,19 @@ func (m model) viewConfirmRestore() string {
 	b.WriteString("\n")
 
 	if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
-		snap := m.restoreSnaps[m.restoreCursor].Name
+		snap := m.restoreSnaps[m.restoreCursor]
 		dst := m.restoreJob.Source
-		b.WriteString("  " + styleDim.Render("snapshot:  ") + styleNormal.Render(snap) + "\n")
+		sourceLabel := "local"
+		sourceColor := colorGray
+		if snap.Source == "nest" {
+			sourceLabel = "nest"
+			sourceColor = lipgloss.Color("#4ade80")
+		} else if snap.Source == "both" {
+			sourceLabel = "nest + local"
+			sourceColor = lipgloss.Color("#4ade80")
+		}
+		b.WriteString("  " + styleDim.Render("snapshot:  ") + styleNormal.Render(snap.Name) + "\n")
+		b.WriteString("  " + styleDim.Render("source:    ") + lipgloss.NewStyle().Foreground(sourceColor).Render(sourceLabel) + "\n")
 		b.WriteString("  " + styleDim.Render("restore to: ") + styleNormal.Render(dst) + "\n\n")
 		b.WriteString("  " + styleWarning.Render("⚠ this will overwrite existing files") + "\n\n")
 		b.WriteString("  " + styleError.Render("[y]") + styleDim.Render(" yes    ") + styleDim.Render("[n / esc]") + styleDim.Render(" cancel") + "\n")
