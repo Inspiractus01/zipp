@@ -175,39 +175,12 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	localMap := map[string]int64{}
 	baseDir := expandPath(job.Destination)
 	if entries, err := os.ReadDir(baseDir); err == nil {
-		var dirs []string
 		for _, e := range entries {
 			name := e.Name()
 			if !e.IsDir() && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") {
 				continue
 			}
-			if e.IsDir() {
-				dirs = append(dirs, name)
-			} else {
-				if info, err2 := e.Info(); err2 == nil {
-					localMap[name] = info.Size()
-				}
-			}
-		}
-		// measure all dirs in one du call — much faster than filepath.Walk per dir
-		if len(dirs) > 0 {
-			paths := make([]string, len(dirs))
-			for i, d := range dirs {
-				paths[i] = filepath.Join(baseDir, d)
-			}
-			args := append([]string{"-sk"}, paths...)
-			if out, err2 := exec.Command("du", args...).Output(); err2 == nil {
-				for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-					parts := strings.Fields(line)
-					if len(parts) < 2 {
-						continue
-					}
-					var kb int64
-					fmt.Sscanf(parts[0], "%d", &kb)
-					name := filepath.Base(parts[1])
-					localMap[name] = kb * 1024
-				}
-			}
+			localMap[name] = 0
 		}
 	}
 
