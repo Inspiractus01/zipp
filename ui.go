@@ -1041,15 +1041,23 @@ func (m model) viewRestore() string {
 			date = rawName
 		}
 
-		// bar
-		filled := int(float64(snap.Size) / float64(maxSize) * barWidth)
-		if filled < 1 && snap.Size > 0 {
-			filled = 1
+		// bar and size — hidden when size is unknown (nest-only)
+		sizeKnown := snap.Size > 0
+		filled := 0
+		if sizeKnown {
+			filled = int(float64(snap.Size) / float64(maxSize) * barWidth)
+			if filled < 1 {
+				filled = 1
+			}
 		}
-		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
-
-		// size label
-		sizeLabel := formatBytes(snap.Size)
+		var bar, sizeLabel string
+		if sizeKnown {
+			bar = strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+			sizeLabel = formatBytes(snap.Size)
+		} else {
+			bar = strings.Repeat(" ", barWidth)
+			sizeLabel = "—"
+		}
 
 		// source badge
 		var sourceBadge string
