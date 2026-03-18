@@ -18,7 +18,7 @@ echo "🪰 installing Zipp..."
 echo "   platform: ${OS}/${ARCH}"
 
 TMP=$(mktemp)
-curl -sL --fail "$URL" -o "$TMP" || {
+curl -L --fail --progress-bar "$URL" -o "$TMP" || {
   echo "download failed — check https://github.com/$REPO/releases"
   exit 1
 }
