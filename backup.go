@@ -225,6 +225,7 @@ type nestSnapshotEntry struct {
 }
 
 // listNestSnapshots fetches snapshots from zipp-nest for a job.
+// Supports both new [{name,size}] and old [string] response formats.
 func listNestSnapshots(jobName, address string) ([]nestSnapshotEntry, error) {
 	url := fmt.Sprintf("http://%s/backups/%s", address, jobName)
 	client := http.Client{Timeout: 4 * time.Second}
@@ -236,9 +237,25 @@ func listNestSnapshots(jobName, address string) ([]nestSnapshotEntry, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nest returned %d", resp.StatusCode)
 	}
-	var entries []nestSnapshotEntry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
+	}
+	// try new format [{name, size}]
+	var entries []nestSnapshotEntry
+	if err := json.Unmarshal(body, &entries); err == nil && len(entries) > 0 {
+		if entries[0].Name != "" {
+			return entries, nil
+		}
+	}
+	// fallback: old format ["name1", "name2"]
+	var names []string
+	if err := json.Unmarshal(body, &names); err != nil {
+		return nil, err
+	}
+	entries = make([]nestSnapshotEntry, len(names))
+	for i, n := range names {
+		entries[i] = nestSnapshotEntry{Name: n}
 	}
 	return entries, nil
 }
