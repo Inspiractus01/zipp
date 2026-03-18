@@ -1028,17 +1028,37 @@ func (m model) viewRestore() string {
 	}
 
 	const barWidth = 14
-	for i, snap := range m.restoreSnaps {
+	const maxVisible = 12
+
+	// scroll window: keep cursor visible
+	scrollOffset := 0
+	if m.restoreCursor >= maxVisible {
+		scrollOffset = m.restoreCursor - maxVisible + 1
+	}
+	visible := m.restoreSnaps
+	if len(visible) > maxVisible {
+		end := scrollOffset + maxVisible
+		if end > len(visible) {
+			end = len(visible)
+		}
+		visible = visible[scrollOffset:end]
+	}
+
+	for ii, snap := range visible {
+		i := ii + scrollOffset
 		selected := i == m.restoreCursor
 
-		// parse date and time from name like 2006-01-02_15-04-05 or same + .tar.gz
+		// find date pattern YYYY-MM-DD anywhere in the name
 		rawName := strings.TrimSuffix(strings.TrimSuffix(snap.Name, ".tar.gz"), ".tar.zst")
-		date, timeStr := "", ""
-		if len(rawName) >= 19 {
-			date = rawName[:10]
-			timeStr = strings.ReplaceAll(rawName[11:16], "-", ":")
-		} else {
-			date = rawName
+		date, timeStr := rawName, ""
+		for j := 0; j <= len(rawName)-10; j++ {
+			if j+4 < len(rawName) && rawName[j+4] == '-' && j+7 < len(rawName) && rawName[j+7] == '-' {
+				date = rawName[j : j+10]
+				if len(rawName) >= j+16 {
+					timeStr = strings.ReplaceAll(rawName[j+11:j+16], "-", ":")
+				}
+				break
+			}
 		}
 
 		// bar and size — hidden when size is unknown (nest-only)
@@ -1103,9 +1123,12 @@ func (m model) viewRestore() string {
 	if m.restoreJob != nil {
 		maxSnap = m.restoreJob.MaxSnapshots
 	}
-	footerParts := fmt.Sprintf("  %d snapshots", total)
+	footerParts := fmt.Sprintf("%d snapshots", total)
 	if maxSnap > 0 {
 		footerParts += fmt.Sprintf("  ·  limit: %d", maxSnap)
+	}
+	if total > maxVisible {
+		footerParts += fmt.Sprintf("  ·  %d–%d of %d", scrollOffset+1, scrollOffset+len(visible), total)
 	}
 	b.WriteString("\n  " + styleDim.Render(strings.Repeat("─", 52)) + "\n")
 	b.WriteString("  " + styleDim.Render(footerParts) + "\n")
