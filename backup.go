@@ -212,14 +212,14 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	}
 
 	// --- nest snapshots ---
-	nestNames := []string{}
+	var nestEntries []nestSnapshotEntry
 	mode := job.mode()
 	if nest != nil && !nest.Disabled && (mode == "nest" || mode == "both") {
-		nestNames, _ = listNestSnapshots(job.Name, nest.Address)
+		nestEntries, _ = listNestSnapshots(job.Name, nest.Address)
 	}
-	nestSet := map[string]bool{}
-	for _, n := range nestNames {
-		nestSet[n] = true
+	nestMap := map[string]int64{}
+	for _, e := range nestEntries {
+		nestMap[e.Name] = e.Size
 	}
 
 	// --- merge ---
@@ -229,16 +229,16 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	// add all local
 	for name, size := range localMap {
 		source := "local"
-		if nestSet[name] {
+		if _, onNest := nestMap[name]; onNest {
 			source = "both"
 		}
 		snaps = append(snaps, SnapshotInfo{Name: name, Size: size, Source: source})
 		seen[name] = true
 	}
 	// add nest-only
-	for _, name := range nestNames {
-		if !seen[name] {
-			snaps = append(snaps, SnapshotInfo{Name: name, Size: 0, Source: "nest"})
+	for _, e := range nestEntries {
+		if !seen[e.Name] {
+			snaps = append(snaps, SnapshotInfo{Name: e.Name, Size: e.Size, Source: "nest"})
 		}
 	}
 
@@ -246,8 +246,13 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	return snaps, nil
 }
 
-// listNestSnapshots fetches snapshot names from zipp-nest for a job.
-func listNestSnapshots(jobName, address string) ([]string, error) {
+type nestSnapshotEntry struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+// listNestSnapshots fetches snapshots from zipp-nest for a job.
+func listNestSnapshots(jobName, address string) ([]nestSnapshotEntry, error) {
 	url := fmt.Sprintf("http://%s/backups/%s", address, jobName)
 	client := http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Get(url)
@@ -258,11 +263,11 @@ func listNestSnapshots(jobName, address string) ([]string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nest returned %d", resp.StatusCode)
 	}
-	var names []string
-	if err := json.NewDecoder(resp.Body).Decode(&names); err != nil {
+	var entries []nestSnapshotEntry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
 		return nil, err
 	}
-	return names, nil
+	return entries, nil
 }
 
 // runRestoreFromNest downloads a snapshot from zipp-nest and extracts it.
