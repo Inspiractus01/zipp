@@ -184,6 +184,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.formInputs = nil
 				m.runOutput = nil
 				m.runDone = false
+				m.restoreLoading = false
+				m.restoreSnaps = nil
+				m.restoreJob = nil
 			} else if m.page == pageConfirmDelete {
 				m.page = pageJobs
 				m.deleteTarget = nil
@@ -293,9 +296,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case snapshotsLoadedMsg:
+		if !m.restoreLoading {
+			return m, nil // user cancelled with esc
+		}
 		m.restoreLoading = false
 		if len(msg.snaps) == 0 {
-			m.page = pageJobs
 			return m, nil
 		}
 		m.restoreJob = msg.job
