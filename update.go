@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -62,11 +63,21 @@ func parseSemver(v string) [3]int {
 
 type updateDoneMsg struct{ err error }
 
+const installScriptURL = "https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh"
+
+// runUpdate downloads and runs the install script (which verifies the
+// binary checksum before installing).
+func runUpdate() error {
+	cmd := exec.Command("bash", "-c", "curl -sL "+installScriptURL+" | bash")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 // runUpdateCmd exits alt-screen so the install script can prompt for sudo password.
 func runUpdateCmd() tea.Cmd {
-	cmd := exec.Command("bash", "-c",
-		"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
-	)
+	cmd := exec.Command("bash", "-c", "curl -sL "+installScriptURL+" | bash")
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return updateDoneMsg{err: err}
 	})

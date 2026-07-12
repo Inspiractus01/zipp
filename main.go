@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -15,24 +13,6 @@ func main() {
 	if len(os.Args) > 1 {
 		runCLI(os.Args[1:])
 		return
-	}
-
-	if result := checkForUpdate(); result.hasUpdate {
-		fmt.Printf("\n  zipp v%s → v%s  updating...\n\n", version, result.latest)
-		cmd := exec.Command("bash", "-c",
-			"curl -sL https://raw.githubusercontent.com/Inspiractus01/zipp/main/install.sh | bash",
-		)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		if err := cmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "\n  update failed: %v\n\n", err)
-		} else {
-			self, err := os.Executable()
-			if err == nil {
-				syscall.Exec(self, os.Args, os.Environ())
-			}
-		}
 	}
 
 	cfg, err := loadConfig()
@@ -48,6 +28,32 @@ func main() {
 	}
 }
 
+// runJobsCLI runs the given jobs sequentially, streaming output to stdout.
+// Returns the number of failed jobs; failures also fire a desktop
+// notification so scheduled runs don't fail silently.
+func runJobsCLI(cfg *Config, jobs []*Job) int {
+	failed := 0
+	for _, job := range jobs {
+		out := make(chan string, 128)
+		done := make(chan struct{})
+		go func() {
+			for line := range out {
+				fmt.Println(line)
+			}
+			close(done)
+		}()
+		err := runJob(job, cfg.Nest, out)
+		close(out)
+		<-done
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "job %q failed: %v\n", job.Name, err)
+			notifyFailure(job.Name, err)
+			failed++
+		}
+	}
+	return failed
+}
+
 func runCLI(args []string) {
 	switch args[0] {
 
@@ -57,26 +63,21 @@ func runCLI(args []string) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		out := make(chan string, 128)
-		go func() {
-			for line := range out {
-				fmt.Println(line)
-			}
-		}()
-		ran := 0
+		var due []*Job
 		for _, job := range cfg.Jobs {
 			if job.isDue() {
-				if err := runJob(job, cfg.Nest, out); err != nil {
-					fmt.Fprintf(os.Stderr, "job %q failed: %v\n", job.Name, err)
-				}
-				ran++
+				due = append(due, job)
 			}
 		}
-		close(out)
-		if ran == 0 {
+		if len(due) == 0 {
 			fmt.Println("no jobs due")
+			return
 		}
+		failed := runJobsCLI(cfg, due)
 		cfg.save()
+		if failed > 0 {
+			os.Exit(1)
+		}
 
 	case "run-all":
 		cfg, err := loadConfig()
@@ -84,22 +85,17 @@ func runCLI(args []string) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		out := make(chan string, 128)
-		go func() {
-			for line := range out {
-				fmt.Println(line)
-			}
-		}()
+		var enabled []*Job
 		for _, job := range cfg.Jobs {
-			if !job.Enabled {
-				continue
-			}
-			if err := runJob(job, cfg.Nest, out); err != nil {
-				fmt.Fprintf(os.Stderr, "job %q failed: %v\n", job.Name, err)
+			if job.Enabled {
+				enabled = append(enabled, job)
 			}
 		}
-		close(out)
+		failed := runJobsCLI(cfg, enabled)
 		cfg.save()
+		if failed > 0 {
+			os.Exit(1)
+		}
 
 	case "list":
 		cfg, err := loadConfig()
@@ -121,6 +117,18 @@ func runCLI(args []string) {
 			fmt.Printf("%s  %-24s  %s\n", status, j.Name, j.nextRun())
 		}
 
+	case "update":
+		result := checkForUpdate()
+		if !result.hasUpdate {
+			fmt.Printf("zipp v%s is up to date\n", version)
+			return
+		}
+		fmt.Printf("updating zipp v%s → v%s\n", version, result.latest)
+		if err := runUpdate(); err != nil {
+			fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
+			os.Exit(1)
+		}
+
 	case "uninstall", "--uninstall":
 		uninstall()
 
@@ -135,6 +143,7 @@ Usage:
   zipp run          run jobs that are due (for cron/systemd)
   zipp run-all      run all enabled jobs
   zipp list         list all jobs
+  zipp update       update zipp to the latest version
   zipp version      show version
   zipp uninstall    remove zipp from this system
 

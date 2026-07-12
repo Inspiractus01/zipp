@@ -35,6 +35,7 @@ func (j *Job) mode() string {
 
 type NestConfig struct {
 	Address  string `json:"address"`
+	Token    string `json:"token,omitempty"`    // bearer token from the nest connection code
 	Disabled bool   `json:"disabled,omitempty"` // when true, skip uploads
 }
 

@@ -9,16 +9,28 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
 )
 
+const snapshotTimeFormat = "2006-01-02_15-04-05"
+
+// snapshotNameRe matches names zipp itself created — a timestamp directory
+// or archive. Pruning and listing only ever touch matching entries, so a
+// destination shared with other files is safe.
+var snapshotNameRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(\.tar\.gz(\.age)?|\.tar\.zst)?$`)
+
+func isSnapshotName(name string) bool {
+	return snapshotNameRe.MatchString(name)
+}
+
 func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 	src := expandPath(job.Source)
 	baseDir := expandPath(job.Destination)
-	snapshot := time.Now().Format("2006-01-02_15-04-05")
+	snapshot := time.Now().Format(snapshotTimeFormat)
 
 	nestAvailable := nest != nil && !nest.Disabled
 	mode := job.mode()
@@ -46,16 +58,35 @@ func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 	}
 
 	if doNest {
-		if !doLocal {
-			job.LastRun = time.Now()
+		if err := uploadToNest(job, src, nest, output); err != nil {
+			return err
 		}
-		uploadToNest(job, src, snapshot, nest, output)
 		if job.MaxSnapshots > 0 {
-			pruneNestSnapshots(job.Name, nest.Address, job.MaxSnapshots, output)
+			pruneNestSnapshots(job.Name, nest, job.MaxSnapshots, output)
 		}
 	}
 
+	// only mark the job done when every requested target succeeded,
+	// so the scheduler retries failed runs on the next tick
+	job.LastRun = time.Now()
 	return nil
+}
+
+// newestSnapshotDir returns the most recent uncompressed snapshot in baseDir
+// other than exclude, or "" if there is none. Used as rsync --link-dest so
+// unchanged files are hardlinked instead of copied again.
+func newestSnapshotDir(baseDir, exclude string) string {
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return ""
+	}
+	newest := ""
+	for _, e := range entries {
+		if e.IsDir() && isSnapshotName(e.Name()) && e.Name() != exclude && e.Name() > newest {
+			newest = e.Name()
+		}
+	}
+	return newest
 }
 
 func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) error {
@@ -75,9 +106,18 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 	output <- fmt.Sprintf("→ %s", job.Name)
 	output <- fmt.Sprintf("  from  %s", src)
 	output <- fmt.Sprintf("  to    %s", dest)
+
+	args := []string{"-a", "--delete", "--stats"}
+	if prev := newestSnapshotDir(baseDir, snapshot); prev != "" {
+		if abs, err := filepath.Abs(filepath.Join(baseDir, prev)); err == nil {
+			args = append(args, "--link-dest="+abs)
+			output <- styleDim.Render("  unchanged files hardlinked against " + prev)
+		}
+	}
+	args = append(args, src, dest)
 	output <- "  syncing files..."
 
-	cmd := exec.Command("rsync", "-a", "--delete", "--stats", src, dest)
+	cmd := exec.Command("rsync", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("rsync failed: %w\n%s", err, string(out))
@@ -90,8 +130,6 @@ func runJobRsync(job *Job, src, baseDir, snapshot string, output chan<- string) 
 			output <- "  " + strings.TrimSpace(line)
 		}
 	}
-
-	job.LastRun = time.Now()
 
 	if job.MaxSnapshots > 0 {
 		output <- "  cleaning up old snapshots..."
@@ -129,8 +167,6 @@ func runJobCompressed(job *Job, src, baseDir, snapshot string, output chan<- str
 	if stat, err := os.Stat(archivePath); err == nil {
 		output <- fmt.Sprintf("  archive size: %s", formatBytes(stat.Size()))
 	}
-
-	job.LastRun = time.Now()
 
 	if job.MaxSnapshots > 0 {
 		output <- "  cleaning up old archives..."
@@ -176,11 +212,9 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	baseDir := expandPath(job.Destination)
 	if entries, err := os.ReadDir(baseDir); err == nil {
 		for _, e := range entries {
-			name := e.Name()
-			if !e.IsDir() && !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tar.zst") {
-				continue
+			if isSnapshotName(e.Name()) {
+				localMap[e.Name()] = 0
 			}
-			localMap[name] = 0
 		}
 	}
 
@@ -188,7 +222,7 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	var nestEntries []nestSnapshotEntry
 	mode := job.mode()
 	if nest != nil && !nest.Disabled && (mode == "nest" || mode == "both") {
-		nestEntries, _ = listNestSnapshots(job.Name, nest.Address)
+		nestEntries, _ = listNestSnapshots(job.Name, nest)
 	}
 	nestMap := map[string]int64{}
 	for _, e := range nestEntries {
@@ -224,12 +258,28 @@ type nestSnapshotEntry struct {
 	Size int64  `json:"size"`
 }
 
+// nestRequest builds a request with the auth token attached.
+func nestRequest(method, url string, nest *NestConfig, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	if nest.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+nest.Token)
+	}
+	return req, nil
+}
+
 // listNestSnapshots fetches snapshots from zipp-nest for a job.
 // Supports both new [{name,size}] and old [string] response formats.
-func listNestSnapshots(jobName, address string) ([]nestSnapshotEntry, error) {
-	url := fmt.Sprintf("http://%s/backups/%s", address, jobName)
+func listNestSnapshots(jobName string, nest *NestConfig) ([]nestSnapshotEntry, error) {
+	url := fmt.Sprintf("http://%s/backups/%s", nest.Address, jobName)
+	req, err := nestRequest(http.MethodGet, url, nest, nil)
+	if err != nil {
+		return nil, err
+	}
 	client := http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +310,8 @@ func listNestSnapshots(jobName, address string) ([]nestSnapshotEntry, error) {
 	return entries, nil
 }
 
-// runRestoreFromNest downloads a snapshot from zipp-nest and extracts it.
+// runRestoreFromNest downloads a snapshot from zipp-nest, decrypts it if
+// needed, and extracts it.
 func runRestoreFromNest(job *Job, snapshot string, nest *NestConfig, output chan<- string) error {
 	dst := expandPath(job.Source)
 	output <- fmt.Sprintf("→ restoring %s from nest", job.Name)
@@ -269,13 +320,29 @@ func runRestoreFromNest(job *Job, snapshot string, nest *NestConfig, output chan
 	output <- "  downloading from nest..."
 
 	url := fmt.Sprintf("http://%s/backups/%s/%s", nest.Address, job.Name, snapshot)
-	resp, err := http.Get(url)
+	req, err := nestRequest(http.MethodGet, url, nest, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("nest download failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("nest returned %d", resp.StatusCode)
+	}
+
+	var reader io.Reader = resp.Body
+	if strings.HasSuffix(snapshot, ".age") {
+		id, err := loadOrCreateIdentity()
+		if err != nil {
+			return fmt.Errorf("could not load encryption key: %w", err)
+		}
+		reader, err = decryptFrom(resp.Body, id)
+		if err != nil {
+			return fmt.Errorf("decrypt failed — is %s the key this backup was made with? %w", keyPath(), err)
+		}
 	}
 
 	// write to temp file
@@ -285,7 +352,7 @@ func runRestoreFromNest(job *Job, snapshot string, nest *NestConfig, output chan
 	}
 	defer os.Remove(tmp.Name())
 
-	n, err := io.Copy(tmp, resp.Body)
+	n, err := io.Copy(tmp, reader)
 	if err != nil {
 		tmp.Close()
 		return fmt.Errorf("download failed: %w", err)
@@ -307,7 +374,6 @@ func runRestoreFromNest(job *Job, snapshot string, nest *NestConfig, output chan
 	output <- "  ✓ restored from nest"
 	return nil
 }
-
 
 func runRestore(job *Job, snapshot string, output chan<- string) error {
 	baseDir := expandPath(job.Destination)
@@ -361,9 +427,8 @@ func pruneSnapshots(dest string, max int) (int, error) {
 	}
 	var snapshots []string
 	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.zst") {
-			snapshots = append(snapshots, name)
+		if isSnapshotName(e.Name()) {
+			snapshots = append(snapshots, e.Name())
 		}
 	}
 	sort.Strings(snapshots)
@@ -392,45 +457,94 @@ func formatBytes(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-func uploadToNest(job *Job, src, snapshot string, nest *NestConfig, output chan<- string) {
-	output <- "  uploading to nest..."
+// uploadToNest streams an encrypted tar.gz of src to the nest server.
+// Nothing is buffered in memory and nothing unencrypted leaves the machine.
+func uploadToNest(job *Job, src string, nest *NestConfig, output chan<- string) error {
+	output <- "  encrypting + uploading to nest..."
 
-	// compress source to memory
+	id, err := loadOrCreateIdentity()
+	if err != nil {
+		return fmt.Errorf("nest upload failed (key): %w", err)
+	}
+
 	srcDir := strings.TrimSuffix(src, "/")
 	cmd := exec.Command("tar", "-czf", "-", "-C", srcDir, ".")
 	if runtime.GOOS == "darwin" {
 		cmd.Env = append(os.Environ(), "COPYFILE_DISABLE=1")
 	}
-	data, err := cmd.Output()
+	tarOut, err := cmd.StdoutPipe()
 	if err != nil {
-		output <- fmt.Sprintf("  ✗ nest upload failed (compress): %v", err)
-		return
+		return fmt.Errorf("nest upload failed: %w", err)
+	}
+	var tarErr bytes.Buffer
+	cmd.Stderr = &tarErr
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("nest upload failed (tar): %w", err)
 	}
 
+	pr, pw := io.Pipe()
+	go func() {
+		ew, err := encryptTo(pw, id)
+		if err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		if _, err := io.Copy(ew, tarOut); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		if err := ew.Close(); err != nil {
+			pw.CloseWithError(err)
+			return
+		}
+		pw.Close()
+	}()
+
 	url := "http://" + nest.Address + "/backups/" + job.Name
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	req, err := nestRequest(http.MethodPost, url, nest, pr)
 	if err != nil {
-		output <- fmt.Sprintf("  ✗ nest upload failed: %v", err)
-		return
+		cmd.Process.Kill()
+		cmd.Wait()
+		return fmt.Errorf("nest upload failed: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Zipp-Encrypted", "age")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		output <- fmt.Sprintf("  ✗ nest upload failed: %v", err)
-		return
+		cmd.Process.Kill()
+		cmd.Wait()
+		return fmt.Errorf("nest upload failed: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		output <- fmt.Sprintf("  ✗ nest upload failed: status %d", resp.StatusCode)
-		return
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("nest upload failed (tar): %v\n%s", err, tarErr.String())
 	}
-	output <- fmt.Sprintf("  ✓ uploaded to nest (%s)", formatBytes(int64(len(data))))
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized:
+		return fmt.Errorf("nest rejected the upload (unauthorized) — re-enter the connection code from the nest")
+	default:
+		return fmt.Errorf("nest upload failed: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Snapshot string `json:"snapshot"`
+		Size     string `json:"size"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&result) == nil && result.Size != "" {
+		output <- fmt.Sprintf("  ✓ uploaded to nest (%s, %s)", result.Snapshot, result.Size)
+	} else {
+		output <- "  ✓ uploaded to nest"
+	}
+	return nil
 }
 
-func pruneNestSnapshots(jobName, address string, keep int, output chan<- string) {
-	url := fmt.Sprintf("http://%s/backups/%s?keep=%d", address, jobName, keep)
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+func pruneNestSnapshots(jobName string, nest *NestConfig, keep int, output chan<- string) {
+	url := fmt.Sprintf("http://%s/backups/%s?keep=%d", nest.Address, jobName, keep)
+	req, err := nestRequest(http.MethodDelete, url, nest, nil)
 	if err != nil {
 		return
 	}

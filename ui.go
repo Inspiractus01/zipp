@@ -16,6 +16,7 @@ type page int
 const (
 	pageMenu page = iota
 	pageJobs
+	pageJobDetail
 	pageAdd
 	pageEdit
 	pageRun
@@ -99,8 +100,8 @@ type model struct {
 	runDone   bool
 
 	// streaming state
-	runCh    <-chan string
-	runErrCh <-chan error
+	runCh     <-chan string
+	runErrCh  <-chan error
 	animFrame int
 
 	// delete confirm
@@ -108,6 +109,10 @@ type model struct {
 
 	// edit
 	editTarget *Job
+
+	// job detail
+	detailJob    *Job
+	detailCursor int
 
 	// restore
 	restoreJob     *Job
@@ -125,7 +130,7 @@ type model struct {
 	nestInputMode  bool
 }
 
-var menuItemsBase = []string{"Jobs", "Run all", "Setup", "Nest", "Quit"}
+var menuItemsBase = []string{"Jobs", "Run all", "Scheduler", "Nest", "Quit"}
 
 func (m model) getMenuItems() []string {
 	if m.updateInfo.hasUpdate {
@@ -187,6 +192,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.restoreLoading = false
 				m.restoreSnaps = nil
 				m.restoreJob = nil
+			} else if m.page == pageJobDetail {
+				m.page = pageJobs
+				m.detailJob = nil
+				m.detailCursor = 0
 			} else if m.page == pageConfirmDelete {
 				m.page = pageJobs
 				m.deleteTarget = nil
@@ -207,6 +216,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateMenu(msg)
 		case pageJobs:
 			return m.updateJobs(msg)
+		case pageJobDetail:
+			return m.updateJobDetail(msg)
 		case pageAdd:
 			return m.updateAdd(msg)
 		case pageEdit:
@@ -405,7 +416,7 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.runOutput = nil
 			m.runDone = false
 			return m, runAllCmd(m.config)
-		case "Setup":
+		case "Scheduler":
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
@@ -448,11 +459,9 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if len(m.config.Jobs) > 0 {
-			job := m.config.Jobs[m.cursor]
-			m.page = pageRun
-			m.runOutput = nil
-			m.runDone = false
-			return m, runJobCmd(m.config, job)
+			m.detailJob = m.config.Jobs[m.cursor]
+			m.detailCursor = 0
+			m.page = pageJobDetail
 		}
 	case "e":
 		if len(m.config.Jobs) > 0 {
@@ -500,6 +509,133 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// — Job detail —
+
+func (m model) jobDetailItems() []string {
+	j := m.detailJob
+	toggle := "Disable"
+	if !j.Enabled {
+		toggle = "Enable"
+	}
+	return []string{
+		"Run now",
+		"Restore a snapshot",
+		"Edit",
+		"Backup mode: " + j.mode(),
+		toggle,
+		"Delete",
+		"Back",
+	}
+}
+
+func (m model) updateJobDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.detailJob == nil {
+		m.page = pageJobs
+		return m, nil
+	}
+	items := m.jobDetailItems()
+	switch msg.String() {
+	case "up", "k":
+		if m.detailCursor > 0 {
+			m.detailCursor--
+		}
+	case "down", "j":
+		if m.detailCursor < len(items)-1 {
+			m.detailCursor++
+		}
+	case "enter":
+		item := items[m.detailCursor]
+		switch {
+		case item == "Run now":
+			job := m.detailJob
+			m.page = pageRun
+			m.runOutput = nil
+			m.runDone = false
+			return m, runJobCmd(m.config, job)
+		case item == "Restore a snapshot":
+			m.restoreLoading = true
+			m.page = pageJobs
+			return m, loadSnapshotsCmd(m.detailJob, m.config.Nest)
+		case item == "Edit":
+			m.editTarget = m.detailJob
+			m.formStep = 0
+			m.formInputs = newFormInputsFrom(m.editTarget)
+			m.page = pageEdit
+		case strings.HasPrefix(item, "Backup mode"):
+			switch m.detailJob.mode() {
+			case "local":
+				m.detailJob.NestMode = "nest"
+			case "nest":
+				m.detailJob.NestMode = "both"
+			default:
+				m.detailJob.NestMode = "local"
+			}
+			m.detailJob.NestEnabled = false
+			m.config.save()
+		case item == "Disable" || item == "Enable":
+			m.detailJob.Enabled = !m.detailJob.Enabled
+			m.config.save()
+		case item == "Delete":
+			m.deleteTarget = m.detailJob
+			m.detailJob = nil
+			m.page = pageConfirmDelete
+		case item == "Back":
+			m.detailJob = nil
+			m.detailCursor = 0
+			m.page = pageJobs
+		}
+	}
+	return m, nil
+}
+
+func (m model) viewJobDetail() string {
+	j := m.detailJob
+	if j == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(renderHeader(j.Name))
+	b.WriteString("\n")
+
+	info := func(label, val string) {
+		b.WriteString("  " + styleLabel.Render(label) + styleNormal.Render(val) + "\n")
+	}
+	info("source", j.Source)
+	dest := j.Destination
+	if dest == "" {
+		dest = "—"
+	}
+	info("destination", dest)
+	if j.IntervalHours == 0 {
+		info("interval", "manual only")
+	} else {
+		info("interval", fmt.Sprintf("every %dh", j.IntervalHours))
+	}
+	if j.MaxSnapshots == 0 {
+		info("snapshots kept", "all")
+	} else {
+		info("snapshots kept", fmt.Sprintf("%d", j.MaxSnapshots))
+	}
+	format := "folders (rsync)"
+	if j.Compress {
+		format = "compressed (.tar.gz)"
+	}
+	info("format", format)
+	info("next run", j.nextRun())
+	b.WriteString("\n")
+
+	for i, item := range m.jobDetailItems() {
+		if i == m.detailCursor {
+			b.WriteString("  " + styleSelected.Render("▸ "+item) + "\n")
+		} else {
+			b.WriteString("  " + styleDim.Render("  "+item) + "\n")
+		}
+	}
+
+	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter select · esc back"))
+	return b.String()
+}
+
 // — Add job form —
 
 func newFormInputs() []textinput.Model {
@@ -510,8 +646,8 @@ func newFormInputs() []textinput.Model {
 		{"e.g. Documents backup", 64},
 		{"e.g. ~/Documents", 256},
 		{"e.g. /mnt/backup/docs", 256},
-		{"hours between backups, 0 = manual", 4},
-		{"number of snapshots to keep", 4},
+		{"24 = daily, 168 = weekly, 0 = manual only", 4},
+		{"old backups to keep, 0 = keep all (default 10)", 4},
 		{"y = compress (.tar.gz, saves space, slower)  n = folders (default)", 1},
 	}
 
@@ -694,6 +830,8 @@ func (m model) View() string {
 		return m.viewMenu()
 	case pageJobs:
 		return m.viewJobs()
+	case pageJobDetail:
+		return m.viewJobDetail()
 	case pageAdd:
 		return m.viewAdd()
 	case pageEdit:
@@ -728,6 +866,13 @@ func (m model) viewMenu() string {
 		if item == "Jobs" && len(m.config.Jobs) > 0 {
 			b.WriteString(styleDim.Render(fmt.Sprintf("   %d total", len(m.config.Jobs))))
 		}
+		if item == "Scheduler" {
+			if m.schedulerInfo.active {
+				b.WriteString(styleSuccess.Render("   ✓ hourly") + styleDim.Render(" via "+m.schedulerInfo.method))
+			} else {
+				b.WriteString(styleError.Render("   ⚠ not running") + styleDim.Render(" — enter to set up"))
+			}
+		}
 		if item == "Nest" {
 			if m.nestChecking {
 				dots := []string{"·  ", "·· ", "···"}
@@ -737,20 +882,13 @@ func (m model) viewMenu() string {
 			} else if m.config.Nest != nil {
 				b.WriteString(styleWarning.Render("   ○ " + m.config.Nest.Address))
 			} else {
-				b.WriteString(styleDim.Render("   not set up"))
+				b.WriteString(styleDim.Render("   remote backup server — not set up"))
 			}
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	if !m.schedulerInfo.active {
-		b.WriteString("  " + styleError.Render("⚠ scheduler not running") +
-			styleDim.Render("  → select Setup to fix") + "\n")
-	} else {
-		b.WriteString("  " + styleSuccess.Render("✓ scheduler active") +
-			styleDim.Render(" via "+m.schedulerInfo.method) + "\n")
-	}
 
 	if m.updateInfo.hasUpdate {
 		alert := lipgloss.NewStyle().Foreground(colorRed).Bold(true)
@@ -768,7 +906,9 @@ func (m model) viewJobs() string {
 	b.WriteString("\n")
 
 	if len(m.config.Jobs) == 0 {
-		b.WriteString(styleDim.Render("  no jobs yet") + "\n")
+		b.WriteString(styleDim.Render("  no jobs yet — press ") +
+			lipgloss.NewStyle().Foreground(colorOrange).Bold(true).Render("c") +
+			styleDim.Render(" to create your first backup job") + "\n")
 	} else {
 		for i, job := range m.config.Jobs {
 			selected := i == m.cursor
@@ -828,19 +968,15 @@ func (m model) viewJobs() string {
 		b.WriteString("\n  " + styleDim.Render("loading snapshots "+dots[m.animFrame%len(dots)]))
 	} else {
 		sep := styleDim.Render("  ·  ")
+		if len(m.config.Jobs) > 0 {
+			b.WriteString("\n  " + styleDim.Render("✓ ok  ·  ⚡ backup due  ·  ✗ disabled"))
+		}
 		b.WriteString("\n  " + strings.Join([]string{
 			keyHint("↑↓", "navigate", colorMuted),
-			keyHint("enter", "run", colorGreen),
-			keyHint("e", "edit", colorYellow),
-			keyHint("d", "delete", colorRed),
-		}, sep))
-		b.WriteString("\n  " + strings.Join([]string{
-			keyHint("r", "restore", colorViolet),
-			keyHint("t", "on/off", colorFuchsia),
-			keyHint("n", "mode", colorGreen),
+			keyHint("enter", "job actions", colorGreen),
 			keyHint("c", "create new", colorOrange),
+			keyHint("esc", "back", colorMuted),
 		}, sep))
-		b.WriteString("\n  " + keyHint("esc", "back", colorMuted))
 	}
 	return b.String()
 }
@@ -1054,7 +1190,8 @@ func (m model) viewRestore() string {
 		selected := i == m.restoreCursor
 
 		// find date pattern YYYY-MM-DD anywhere in the name
-		rawName := strings.TrimSuffix(strings.TrimSuffix(snap.Name, ".tar.gz"), ".tar.zst")
+		rawName := strings.TrimSuffix(snap.Name, ".age")
+		rawName = strings.TrimSuffix(strings.TrimSuffix(rawName, ".tar.gz"), ".tar.zst")
 		date, timeStr := rawName, ""
 		for j := 0; j <= len(rawName)-10; j++ {
 			if j+4 < len(rawName) && rawName[j+4] == '-' && j+7 < len(rawName) && rawName[j+7] == '-' {
@@ -1210,8 +1347,8 @@ func (m model) updateNestMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.config.save()
 		case "Enter server code", "Change server code":
 			ti := textinput.New()
-			ti.Placeholder = "short code (e.g. 6456-fd44)"
-			ti.Width = 40
+			ti.Placeholder = "e.g. oak-fox-red-ice-9f3a2b…"
+			ti.Width = 56
 			if m.config.Nest != nil {
 				ti.SetValue(m.config.Nest.Address)
 			}
@@ -1242,12 +1379,12 @@ func (m model) updateNestInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.nestInputMode = false
 			return m, nil
 		}
-		address, err := decodeNestCode(raw)
+		address, token, err := decodeNestCode(raw)
 		if err != nil {
 			m.nestErr = err.Error()
 			return m, nil
 		}
-		m.config.Nest = &NestConfig{Address: address}
+		m.config.Nest = &NestConfig{Address: address, Token: token}
 		if err := m.config.save(); err != nil {
 			m.nestErr = "could not save: " + err.Error()
 			return m, nil

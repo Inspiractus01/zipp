@@ -2,6 +2,7 @@
 set -e
 
 REPO="Inspiractus01/zipp"
+BIN="zipp"
 INSTALL_DIR="/usr/local/bin"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -12,21 +13,44 @@ case $ARCH in
   *) echo "unsupported arch: $ARCH"; exit 1 ;;
 esac
 
-URL="https://github.com/$REPO/releases/latest/download/zipp-${OS}-${ARCH}"
+ASSET="${BIN}-${OS}-${ARCH}"
+BASE="https://github.com/$REPO/releases/latest/download"
 
 echo "🪰 installing Zipp..."
 echo "   platform: ${OS}/${ARCH}"
 
-TMP=$(mktemp)
-curl -L --fail --progress-bar "$URL" -o "$TMP" || {
+TMPDL=$(mktemp -d)
+trap 'rm -rf "$TMPDL"' EXIT
+
+curl -L --fail --progress-bar "$BASE/$ASSET" -o "$TMPDL/$ASSET" || {
   echo "download failed — check https://github.com/$REPO/releases"
   exit 1
 }
-chmod +x "$TMP"
-sudo mv "$TMP" "$INSTALL_DIR/zipp"
 
-echo "✓ installed to $INSTALL_DIR/zipp"
-echo "  run 'zipp --version' to verify"
+# verify checksum when the release ships one
+if curl -sL --fail "$BASE/checksums.txt" -o "$TMPDL/checksums.txt" 2>/dev/null; then
+  EXPECTED=$(awk -v a="$ASSET" '$2 == a {print $1}' "$TMPDL/checksums.txt")
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "$TMPDL/$ASSET" | awk '{print $1}')
+  else
+    ACTUAL=$(shasum -a 256 "$TMPDL/$ASSET" | awk '{print $1}')
+  fi
+  if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then
+    echo "✗ checksum verification FAILED — refusing to install"
+    echo "  expected: ${EXPECTED:-<missing>}"
+    echo "  actual:   $ACTUAL"
+    exit 1
+  fi
+  echo "✓ checksum verified"
+else
+  echo "! release has no checksums.txt — skipping verification"
+fi
+
+chmod +x "$TMPDL/$ASSET"
+sudo mv "$TMPDL/$ASSET" "$INSTALL_DIR/$BIN"
+
+echo "✓ installed to $INSTALL_DIR/$BIN"
+echo "  run '$BIN --version' to verify"
 
 # systemd on linux
 if [ "$OS" = "linux" ] && command -v systemctl &>/dev/null; then

@@ -53,30 +53,33 @@ var wordIndex = func() map[string]int {
 	return m
 }()
 
-// decodeNestCode decodes a 4-word code (e.g. "kin-hay-fig-big") back to "IP:port".
-// If input already contains a dot it is treated as a full IP address (port appended if missing).
-func decodeNestCode(code string) (string, error) {
+// decodeNestCode decodes a connection code back to ("IP:port", token).
+// Codes are 4 words for the address, optionally followed by a hex auth
+// token: "kin-hay-fig-big-a1b2c3…". A raw IP address also works (port
+// appended if missing, no token).
+func decodeNestCode(code string) (string, string, error) {
 	code = strings.TrimSpace(code)
 
 	// full address passed directly
 	if strings.Contains(code, ".") {
 		if !strings.Contains(code, ":") {
-			return code + fmt.Sprintf(":%d", defaultNestPort), nil
+			return code + fmt.Sprintf(":%d", defaultNestPort), "", nil
 		}
-		return code, nil
+		return code, "", nil
 	}
 
-	words := strings.Split(strings.ToLower(code), "-")
-	if len(words) != 4 {
-		return "", fmt.Errorf("expected 4 words like oak-fox-red-ice")
+	parts := strings.Split(strings.ToLower(code), "-")
+	if len(parts) < 4 {
+		return "", "", fmt.Errorf("expected 4 words like oak-fox-red-ice")
 	}
+	token := strings.Join(parts[4:], "")
 	octets := make([]string, 4)
-	for i, w := range words {
+	for i, w := range parts[:4] {
 		idx, ok := wordIndex[w]
 		if !ok {
-			return "", fmt.Errorf("unknown word: %s", w)
+			return "", "", fmt.Errorf("unknown word: %s", w)
 		}
 		octets[i] = strconv.Itoa(idx)
 	}
-	return strings.Join(octets, ".") + fmt.Sprintf(":%d", defaultNestPort), nil
+	return strings.Join(octets, ".") + fmt.Sprintf(":%d", defaultNestPort), token, nil
 }

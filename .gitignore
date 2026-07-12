@@ -1,3 +1,4 @@
 zipp
 dist/
 .idea/
+.DS_Store
