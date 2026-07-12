@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -94,6 +95,7 @@ type model struct {
 	// add job form
 	formStep   int
 	formInputs []textinput.Model
+	formErr    string
 
 	// run view
 	runOutput []string
@@ -103,6 +105,11 @@ type model struct {
 	runCh     <-chan string
 	runErrCh  <-chan error
 	animFrame int
+
+	// running guards against starting a second run/restore while one is
+	// still in flight, and runCancel lets esc cancel the in-flight one.
+	running   bool
+	runCancel context.CancelFunc
 
 	// delete confirm
 	deleteTarget *Job
@@ -119,6 +126,7 @@ type model struct {
 	restoreSnaps   []SnapshotInfo
 	restoreCursor  int
 	restoreLoading bool
+	restoreMsg     string
 
 	// nest
 	nestInput      textinput.Model
@@ -166,6 +174,13 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// ctrl+c always force-quits, regardless of page — everything below is
+	// page-scoped (e.g. plain "q" only quits from the menu, so it doesn't
+	// steal the letter "q" while typing into a text input elsewhere).
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -177,19 +192,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateNest(msg)
 		}
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "q":
 			if m.page == pageMenu {
 				return m, tea.Quit
 			}
 		case "esc":
-			if m.page == pageAdd || m.page == pageEdit || m.page == pageJobs || m.page == pageRun {
+			if m.page == pageRun {
+				// cancel the in-flight run so it stops before mutating any
+				// more shared job state, and free the guard so a new run
+				// can be started.
+				if m.runCancel != nil {
+					m.runCancel()
+				}
+				m.running = false
+				m.runCancel = nil
+				m.page = pageMenu
+				m.cursor = 0
+				m.runOutput = nil
+				m.runDone = false
+				return m, nil
+			}
+			if m.page == pageAdd || m.page == pageEdit || m.page == pageJobs {
 				m.page = pageMenu
 				m.cursor = 0
 				m.formStep = 0
 				m.formInputs = nil
-				m.runOutput = nil
-				m.runDone = false
+				m.formErr = ""
 				m.restoreLoading = false
+				m.restoreMsg = ""
 				m.restoreSnaps = nil
 				m.restoreJob = nil
 			} else if m.page == pageJobDetail {
@@ -239,6 +269,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case updateDoneMsg:
+		m.running = false
+		m.runCancel = nil
 		if msg.err != nil {
 			m.runDone = true
 			m.runOutput = append(m.runOutput, styleError.Render("update failed: "+msg.err.Error()))
@@ -283,6 +315,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.runDone = true
 		m.runCh = nil
 		m.runErrCh = nil
+		m.running = false
+		m.runCancel = nil
 		if msg.err != nil {
 			m.runOutput = append(m.runOutput, styleError.Render("error: "+msg.err.Error()))
 		} else {
@@ -297,6 +331,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case runResultMsg:
 		m.runDone = true
+		m.running = false
+		m.runCancel = nil
 		m.runOutput = msg.lines
 		if msg.err != nil {
 			m.runOutput = append(m.runOutput, styleError.Render("error: "+msg.err.Error()))
@@ -312,8 +348,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.restoreLoading = false
 		if len(msg.snaps) == 0 {
+			m.restoreMsg = "no snapshots yet for \"" + msg.job.Name + "\""
 			return m, nil
 		}
+		m.restoreMsg = ""
 		m.restoreJob = msg.job
 		m.restoreSnaps = msg.snaps
 		m.restoreCursor = 0
@@ -349,7 +387,7 @@ func nextLineCmd(ch <-chan string, errCh <-chan error) tea.Cmd {
 	}
 }
 
-func runAllCmd(cfg *Config) tea.Cmd {
+func runAllCmd(ctx context.Context, cfg *Config) tea.Cmd {
 	return func() tea.Msg {
 		ch := make(chan string, 256)
 		errCh := make(chan error, 1)
@@ -358,12 +396,18 @@ func runAllCmd(cfg *Config) tea.Cmd {
 			var runErr error
 			ran := 0
 			for _, job := range cfg.Jobs {
+				if ctx.Err() != nil {
+					ch <- styleDim.Render("cancelled")
+					break
+				}
 				if !job.Enabled {
 					continue
 				}
-				if err := runJob(job, cfg.Nest, ch); err != nil {
-					ch <- styleError.Render("✗ " + err.Error())
-					runErr = err
+				if err := runJob(ctx, job, cfg.Nest, ch); err != nil {
+					if ctx.Err() == nil {
+						ch <- styleError.Render("✗ " + err.Error())
+						runErr = err
+					}
 				}
 				ran++
 			}
@@ -376,14 +420,14 @@ func runAllCmd(cfg *Config) tea.Cmd {
 	}
 }
 
-func runJobCmd(cfg *Config, job *Job) tea.Cmd {
+func runJobCmd(ctx context.Context, cfg *Config, job *Job) tea.Cmd {
 	return func() tea.Msg {
 		ch := make(chan string, 256)
 		errCh := make(chan error, 1)
 		go func() {
 			defer close(ch)
 			var runErr error
-			if err := runJob(job, cfg.Nest, ch); err != nil {
+			if err := runJob(ctx, job, cfg.Nest, ch); err != nil && ctx.Err() == nil {
 				ch <- styleError.Render("✗ " + err.Error())
 				runErr = err
 			}
@@ -412,16 +456,32 @@ func (m model) updateMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.page = pageJobs
 			m.cursor = 0
 		case "Run all":
+			if m.running {
+				return m, nil
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.running = true
+			m.runCancel = cancel
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
-			return m, runAllCmd(m.config)
+			return m, runAllCmd(ctx, m.config)
 		case "Scheduler":
+			if m.running {
+				return m, nil
+			}
+			m.running = true
+			m.runCancel = nil
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
 			return m, setupSchedulerCmd()
 		case "Run update":
+			if m.running {
+				return m, nil
+			}
+			m.running = true
+			m.runCancel = nil
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
@@ -484,27 +544,21 @@ func (m model) updateJobs(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
-			switch job.mode() {
-			case "local":
-				job.NestMode = "nest"
-			case "nest":
-				job.NestMode = "both"
-			default:
-				job.NestMode = "local"
-			}
-			job.NestEnabled = false // clear legacy field
+			job.cycleMode()
 			m.config.save()
 		}
 	case "r":
 		if len(m.config.Jobs) > 0 {
 			job := m.config.Jobs[m.cursor]
 			m.restoreLoading = true
+			m.restoreMsg = ""
 			return m, loadSnapshotsCmd(job, m.config.Nest)
 		}
 	case "c":
 		m.page = pageAdd
 		m.formStep = 0
 		m.formInputs = newFormInputs()
+		m.formErr = ""
 	}
 	return m, nil
 }
@@ -547,13 +601,20 @@ func (m model) updateJobDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		item := items[m.detailCursor]
 		switch {
 		case item == "Run now":
+			if m.running {
+				return m, nil
+			}
 			job := m.detailJob
+			ctx, cancel := context.WithCancel(context.Background())
+			m.running = true
+			m.runCancel = cancel
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
-			return m, runJobCmd(m.config, job)
+			return m, runJobCmd(ctx, m.config, job)
 		case item == "Restore a snapshot":
 			m.restoreLoading = true
+			m.restoreMsg = ""
 			m.page = pageJobs
 			return m, loadSnapshotsCmd(m.detailJob, m.config.Nest)
 		case item == "Edit":
@@ -562,15 +623,7 @@ func (m model) updateJobDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.formInputs = newFormInputsFrom(m.editTarget)
 			m.page = pageEdit
 		case strings.HasPrefix(item, "Backup mode"):
-			switch m.detailJob.mode() {
-			case "local":
-				m.detailJob.NestMode = "nest"
-			case "nest":
-				m.detailJob.NestMode = "both"
-			default:
-				m.detailJob.NestMode = "local"
-			}
-			m.detailJob.NestEnabled = false
+			m.detailJob.cycleMode()
 			m.config.save()
 		case item == "Disable" || item == "Enable":
 			m.detailJob.Enabled = !m.detailJob.Enabled
@@ -597,8 +650,9 @@ func (m model) viewJobDetail() string {
 	b.WriteString(renderHeader(j.Name))
 	b.WriteString("\n")
 
+	lStyle := styleLabel.Copy().Width(labelWidth(m.windowWidth))
 	info := func(label, val string) {
-		b.WriteString("  " + styleLabel.Render(label) + styleNormal.Render(val) + "\n")
+		b.WriteString("  " + lStyle.Render(label) + styleNormal.Render(val) + "\n")
 	}
 	info("source", j.Source)
 	dest := j.Destination
@@ -691,10 +745,19 @@ func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 		}
 		job := m.buildJob()
-		if job != nil {
-			m.config.addJob(job)
-			m.config.save()
+		if job == nil {
+			// stay on the form and say what's missing instead of silently
+			// discarding everything the user just typed
+			missingStep, msg := m.formMissingField()
+			m.formErr = msg
+			m.formInputs[m.formStep].Blur()
+			m.formStep = missingStep
+			m.formInputs[m.formStep].Focus()
+			return m, textinput.Blink
 		}
+		m.formErr = ""
+		m.config.addJob(job)
+		m.config.save()
 		m.page = pageJobs
 		m.cursor = len(m.config.Jobs) - 1
 		m.formInputs = nil
@@ -713,6 +776,23 @@ func (m model) updateAdd(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.formInputs[m.formStep], cmd = m.formInputs[m.formStep].Update(msg)
 	return m, cmd
+}
+
+// formMissingField reports which required field(s) are blank and which form
+// step to focus so the user lands on the problem field, not just a bounce
+// back to the jobs list.
+func (m model) formMissingField() (step int, message string) {
+	nameBlank := strings.TrimSpace(m.formInputs[0].Value()) == ""
+	srcBlank := strings.TrimSpace(m.formInputs[1].Value()) == ""
+	switch {
+	case nameBlank && srcBlank:
+		return 0, "Name and Source are required"
+	case nameBlank:
+		return 0, "Name is required"
+	case srcBlank:
+		return 1, "Source is required"
+	}
+	return 0, "Name and Source are required"
 }
 
 func (m model) buildJob() *Job {
@@ -824,30 +904,40 @@ func (m model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // — Views —
 
+// View renders a small "ZIPP · PAGE" nav bar above a single bordered panel
+// holding the current page's content — a consistent frame every page shares.
 func (m model) View() string {
+	title, body := m.currentPageView()
+	return pageHeader(title) + "\n\n" + renderPanel(m.windowWidth, body)
+}
+
+func (m model) currentPageView() (title, body string) {
 	switch m.page {
 	case pageMenu:
-		return m.viewMenu()
+		return "menu", m.viewMenu()
 	case pageJobs:
-		return m.viewJobs()
+		return "jobs", m.viewJobs()
 	case pageJobDetail:
-		return m.viewJobDetail()
+		return "job detail", m.viewJobDetail()
 	case pageAdd:
-		return m.viewAdd()
+		return "add job", m.viewAdd()
 	case pageEdit:
-		return m.viewEdit()
+		return "edit job", m.viewEdit()
 	case pageRun:
-		return m.viewRun()
+		if m.runDone {
+			return "done", m.viewRunDone()
+		}
+		return "running", m.viewRun()
 	case pageConfirmDelete:
-		return m.viewConfirmDelete()
+		return "delete job", m.viewConfirmDelete()
 	case pageRestore:
-		return m.viewRestore()
+		return "restore", m.viewRestore()
 	case pageConfirmRestore:
-		return m.viewConfirmRestore()
+		return "confirm restore", m.viewConfirmRestore()
 	case pageNest:
-		return m.viewNest()
+		return "nest", m.viewNest()
 	}
-	return ""
+	return "", ""
 }
 
 func (m model) viewMenu() string {
@@ -902,7 +992,7 @@ func (m model) viewMenu() string {
 
 func (m model) viewJobs() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Jobs"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	if len(m.config.Jobs) == 0 {
@@ -947,7 +1037,7 @@ func (m model) viewJobs() string {
 			}
 
 			line := fmt.Sprintf("%s%s %s", prefix, indicator+"  "+nameStr, next)
-			b.WriteString(lipgloss.NewStyle().Width(60).Render(line) + "\n")
+			b.WriteString(lipgloss.NewStyle().Width(jobRowWidth(m.windowWidth)).Render(line) + "\n")
 
 			if job.Destination == "" {
 				switch job.mode() {
@@ -967,15 +1057,18 @@ func (m model) viewJobs() string {
 		dots := []string{"·  ", "·· ", "···"}
 		b.WriteString("\n  " + styleDim.Render("loading snapshots "+dots[m.animFrame%len(dots)]))
 	} else {
+		if m.restoreMsg != "" {
+			b.WriteString("\n  " + styleWarning.Render("⚠ "+m.restoreMsg))
+		}
 		sep := styleDim.Render("  ·  ")
 		if len(m.config.Jobs) > 0 {
 			b.WriteString("\n  " + styleDim.Render("✓ ok  ·  ⚡ backup due  ·  ✗ disabled"))
 		}
 		b.WriteString("\n  " + strings.Join([]string{
-			keyHint("↑↓", "navigate", colorMuted),
+			keyHint("↑↓", "navigate", colorDim),
 			keyHint("enter", "job actions", colorGreen),
 			keyHint("c", "create new", colorOrange),
-			keyHint("esc", "back", colorMuted),
+			keyHint("esc", "back", colorDim),
 		}, sep))
 	}
 	return b.String()
@@ -983,11 +1076,12 @@ func (m model) viewJobs() string {
 
 func (m model) viewAdd() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("add job"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
+	lw := labelWidth(m.windowWidth)
 	for i, label := range formLabels {
-		lStyle := styleLabel
+		lStyle := styleLabel.Copy().Width(lw)
 		var val string
 
 		if i == m.formStep {
@@ -1005,6 +1099,10 @@ func (m model) viewAdd() string {
 		}
 	}
 
+	if m.formErr != "" {
+		b.WriteString("\n  " + styleError.Render("⚠ "+m.formErr) + "\n")
+	}
+
 	b.WriteString(styleHint.Render("\n  enter next · shift+tab back · esc cancel"))
 	return b.String()
 }
@@ -1018,11 +1116,13 @@ func (m model) viewRun() string {
 
 	var b strings.Builder
 
-	// center the fly horizontally (visual width ≈ 7 chars)
+	// center the fly within the panel's inner content area (not the full
+	// terminal width, since it now renders inside a bordered panel)
+	innerWidth := contentWidth(m.windowWidth)
 	const flyWidth = 7
 	pad := ""
-	if m.windowWidth > flyWidth {
-		pad = strings.Repeat(" ", (m.windowWidth-flyWidth)/2)
+	if innerWidth > flyWidth {
+		pad = strings.Repeat(" ", (innerWidth-flyWidth)/2)
 	}
 
 	b.WriteString("\n\n\n")
@@ -1038,14 +1138,11 @@ func (m model) viewRun() string {
 			status = last
 		}
 	}
-	statusLine := styleDim.Render(status)
-	if m.windowWidth > 0 {
-		statusLine = lipgloss.NewStyle().
-			Width(m.windowWidth).
-			Align(lipgloss.Center).
-			Foreground(colorMuted).
-			Render(status)
-	}
+	statusLine := lipgloss.NewStyle().
+		Width(innerWidth).
+		Align(lipgloss.Center).
+		Foreground(colorDim).
+		Render(status)
 	b.WriteString(statusLine + "\n")
 
 	return b.String()
@@ -1053,7 +1150,7 @@ func (m model) viewRun() string {
 
 func (m model) viewRunDone() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Done"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	lines := m.runOutput
@@ -1070,11 +1167,12 @@ func (m model) viewRunDone() string {
 
 func (m model) viewEdit() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("edit job"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
+	lw := labelWidth(m.windowWidth)
 	for i, label := range formLabels {
-		lStyle := styleLabel
+		lStyle := styleLabel.Copy().Width(lw)
 		var val string
 		if i == m.formStep {
 			lStyle = lStyle.Copy().Foreground(colorLavender)
@@ -1114,10 +1212,15 @@ func (m model) updateRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) updateConfirmRestore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "enter":
+		if m.running {
+			return m, nil
+		}
 		if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
 			snap := m.restoreSnaps[m.restoreCursor]
 			job := m.restoreJob
 			nest := m.config.Nest
+			m.running = true
+			m.runCancel = nil
 			m.page = pageRun
 			m.runOutput = nil
 			m.runDone = false
@@ -1152,13 +1255,14 @@ func (m model) viewRestore() string {
 		jobName = m.restoreJob.Name
 		jobDest = expandPath(m.restoreJob.Destination)
 	}
-	b.WriteString(renderHeader("Restore — " + jobName))
+	b.WriteString(renderHeader(jobName))
 	b.WriteString("\n")
 
 	// path header
-	pathStyle := lipgloss.NewStyle().Foreground(colorMuted)
+	pathStyle := lipgloss.NewStyle().Foreground(colorDim)
+	rule := strings.Repeat("─", dividerWidth(m.windowWidth))
 	b.WriteString("  " + pathStyle.Render(jobDest+"/") + "\n")
-	b.WriteString("  " + styleDim.Render(strings.Repeat("─", 52)) + "\n\n")
+	b.WriteString("  " + styleDim.Render(rule) + "\n\n")
 
 	// find max size for bar scaling
 	var maxSize int64 = 1
@@ -1189,19 +1293,7 @@ func (m model) viewRestore() string {
 		i := ii + scrollOffset
 		selected := i == m.restoreCursor
 
-		// find date pattern YYYY-MM-DD anywhere in the name
-		rawName := strings.TrimSuffix(snap.Name, ".age")
-		rawName = strings.TrimSuffix(strings.TrimSuffix(rawName, ".tar.gz"), ".tar.zst")
-		date, timeStr := rawName, ""
-		for j := 0; j <= len(rawName)-10; j++ {
-			if j+4 < len(rawName) && rawName[j+4] == '-' && j+7 < len(rawName) && rawName[j+7] == '-' {
-				date = rawName[j : j+10]
-				if len(rawName) >= j+16 {
-					timeStr = strings.ReplaceAll(rawName[j+11:j+16], "-", ":")
-				}
-				break
-			}
-		}
+		date, timeStr := snapshotDateTime(snap.Name)
 
 		// bar and size — hidden when size is unknown (nest-only)
 		sizeKnown := snap.Size > 0
@@ -1225,12 +1317,12 @@ func (m model) viewRestore() string {
 		var sourceBadge string
 		switch snap.Source {
 		case "nest":
-			sourceBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ade80")).Render(" [nest]")
+			sourceBadge = lipgloss.NewStyle().Foreground(colorGreen).Render(" [nest]")
 		case "both":
-			sourceBadge = lipgloss.NewStyle().Foreground(lipgloss.Color("#4ade80")).Render(" [nest]") +
+			sourceBadge = lipgloss.NewStyle().Foreground(colorGreen).Render(" [nest]") +
 				lipgloss.NewStyle().Foreground(colorLavender).Render("+local")
 		default:
-			sourceBadge = lipgloss.NewStyle().Foreground(colorGray).Render(" [local]")
+			sourceBadge = lipgloss.NewStyle().Foreground(colorBorder).Render(" [local]")
 		}
 
 		// latest badge
@@ -1244,10 +1336,10 @@ func (m model) viewRestore() string {
 			cursor = lipgloss.NewStyle().Foreground(colorViolet).Bold(true).Render("▸ ")
 		}
 
-		dateS := lipgloss.NewStyle().Foreground(colorMuted).Render(date)
-		timeS := lipgloss.NewStyle().Foreground(colorGray).Render(timeStr)
+		dateS := lipgloss.NewStyle().Foreground(colorDim).Render(date)
+		timeS := lipgloss.NewStyle().Foreground(colorBorder).Render(timeStr)
 		barS := lipgloss.NewStyle().Foreground(colorViolet).Render(bar)
-		sizeS := lipgloss.NewStyle().Foreground(colorMuted).Width(9).Render(sizeLabel)
+		sizeS := lipgloss.NewStyle().Foreground(colorDim).Width(9).Render(sizeLabel)
 
 		if selected {
 			dateS = lipgloss.NewStyle().Foreground(colorWhite).Bold(true).Render(date)
@@ -1272,7 +1364,7 @@ func (m model) viewRestore() string {
 	if total > maxVisible {
 		footerParts += fmt.Sprintf("  ·  %d–%d of %d", scrollOffset+1, scrollOffset+len(visible), total)
 	}
-	b.WriteString("\n  " + styleDim.Render(strings.Repeat("─", 52)) + "\n")
+	b.WriteString("\n  " + styleDim.Render(rule) + "\n")
 	b.WriteString("  " + styleDim.Render(footerParts) + "\n")
 	b.WriteString(styleHint.Render("\n  ↑↓ navigate · enter restore · esc back"))
 	return b.String()
@@ -1408,7 +1500,7 @@ func (m model) viewNest() string {
 
 func (m model) viewNestMenu() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Nest"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	tsLine := "  Tailscale   "
@@ -1454,7 +1546,7 @@ func (m model) viewNestMenu() string {
 
 func (m model) viewNestInput() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Nest — address"))
+	b.WriteString(renderHeader("address"))
 	b.WriteString("\n")
 	b.WriteString(styleDim.Render("  enter the short code from zipp-nest Connection info:\n\n"))
 	b.WriteString("  " + m.nestInput.View() + "\n")
@@ -1469,20 +1561,20 @@ func (m model) viewNestInput() string {
 
 func (m model) viewConfirmRestore() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Restore"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	if m.restoreJob != nil && m.restoreCursor < len(m.restoreSnaps) {
 		snap := m.restoreSnaps[m.restoreCursor]
 		dst := m.restoreJob.Source
 		sourceLabel := "local"
-		sourceColor := colorGray
+		var sourceColor lipgloss.TerminalColor = colorBorder
 		if snap.Source == "nest" {
 			sourceLabel = "nest"
-			sourceColor = lipgloss.Color("#4ade80")
+			sourceColor = colorGreen
 		} else if snap.Source == "both" {
 			sourceLabel = "nest + local"
-			sourceColor = lipgloss.Color("#4ade80")
+			sourceColor = colorGreen
 		}
 		b.WriteString("  " + styleDim.Render("snapshot:  ") + styleNormal.Render(snap.Name) + "\n")
 		b.WriteString("  " + styleDim.Render("source:    ") + lipgloss.NewStyle().Foreground(sourceColor).Render(sourceLabel) + "\n")
@@ -1495,7 +1587,7 @@ func (m model) viewConfirmRestore() string {
 
 func (m model) viewConfirmDelete() string {
 	var b strings.Builder
-	b.WriteString(renderHeader("Delete job"))
+	b.WriteString(renderHeader(""))
 	b.WriteString("\n")
 
 	if m.deleteTarget != nil {

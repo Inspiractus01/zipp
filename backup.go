@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,7 +28,11 @@ func isSnapshotName(name string) bool {
 	return snapshotNameRe.MatchString(name)
 }
 
-func runJob(job *Job, nest *NestConfig, output chan<- string) error {
+func runJob(ctx context.Context, job *Job, nest *NestConfig, output chan<- string) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	src := expandPath(job.Source)
 	baseDir := expandPath(job.Destination)
 	snapshot := time.Now().Format(snapshotTimeFormat)
@@ -57,6 +62,10 @@ func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 		}
 	}
 
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	if doNest {
 		if err := uploadToNest(job, src, nest, output); err != nil {
 			return err
@@ -64,6 +73,13 @@ func runJob(job *Job, nest *NestConfig, output chan<- string) error {
 		if job.MaxSnapshots > 0 {
 			pruneNestSnapshots(job.Name, nest, job.MaxSnapshots, output)
 		}
+	}
+
+	// don't let a cancelled run mutate shared job state (guards against a
+	// leftover goroutine racing a freshly-started run after the user
+	// cancelled with esc)
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	// only mark the job done when every requested target succeeded,
@@ -213,7 +229,7 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 	if entries, err := os.ReadDir(baseDir); err == nil {
 		for _, e := range entries {
 			if isSnapshotName(e.Name()) {
-				localMap[e.Name()] = 0
+				localMap[e.Name()] = snapshotSize(filepath.Join(baseDir, e.Name()), e)
 			}
 		}
 	}
@@ -251,6 +267,53 @@ func listSnapshotInfos(job *Job, nest *NestConfig) ([]SnapshotInfo, error) {
 
 	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Name > snaps[j].Name })
 	return snaps, nil
+}
+
+// snapshotSize computes the on-disk size of a snapshot: the file size for
+// compressed archives, or the sum of file sizes for an rsync snapshot
+// directory (walked once per listing — snapshot dirs are small enough for
+// this to be cheap, and it's the only way to show a real number instead of
+// treating every local snapshot as size-unknown).
+func snapshotSize(fullPath string, entry os.DirEntry) int64 {
+	if !entry.IsDir() {
+		if info, err := entry.Info(); err == nil {
+			return info.Size()
+		}
+		return 0
+	}
+	var total int64
+	filepath.WalkDir(fullPath, func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+// snapshotDateRe matches the embedded timestamp (YYYY-MM-DD_HH-MM-SS) inside
+// a snapshot name, which may carry archive/encryption suffixes.
+var snapshotDateRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}`)
+
+// snapshotDateTime extracts a display date ("2026-07-12") and time ("10:30")
+// from a snapshot name. If no timestamp is found, the trimmed name is
+// returned as the date with an empty time, matching the historical fallback.
+func snapshotDateTime(name string) (date, timeStr string) {
+	raw := strings.TrimSuffix(name, ".age")
+	raw = strings.TrimSuffix(strings.TrimSuffix(raw, ".tar.gz"), ".tar.zst")
+
+	match := snapshotDateRe.FindString(raw)
+	if match == "" {
+		return raw, ""
+	}
+	t, err := time.Parse(snapshotTimeFormat, match)
+	if err != nil {
+		return raw, ""
+	}
+	return t.Format("2006-01-02"), t.Format("15:04")
 }
 
 type nestSnapshotEntry struct {

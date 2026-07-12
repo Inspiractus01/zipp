@@ -33,6 +33,20 @@ func (j *Job) mode() string {
 	return "local"
 }
 
+// cycleMode advances the job's backup mode through the 3-way cycle
+// local -> nest -> both -> local, clearing the legacy NestEnabled field.
+func (j *Job) cycleMode() {
+	switch j.mode() {
+	case "local":
+		j.NestMode = "nest"
+	case "nest":
+		j.NestMode = "both"
+	default:
+		j.NestMode = "local"
+	}
+	j.NestEnabled = false // clear legacy field
+}
+
 type NestConfig struct {
 	Address  string `json:"address"`
 	Token    string `json:"token,omitempty"`    // bearer token from the nest connection code

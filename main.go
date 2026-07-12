@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -42,7 +43,7 @@ func runJobsCLI(cfg *Config, jobs []*Job) int {
 			}
 			close(done)
 		}()
-		err := runJob(job, cfg.Nest, out)
+		err := runJob(context.Background(), job, cfg.Nest, out)
 		close(out)
 		<-done
 		if err != nil {
